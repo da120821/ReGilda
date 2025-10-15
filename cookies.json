@@ -1,0 +1,62 @@
+[
+    {
+        "domain": ".remanga.org",
+        "expiry": 1791494043,
+        "httpOnly": true,
+        "name": "serverUser",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "value": "%7B%22id%22%3A420456%2C%22username%22%3A%22Akira_Horu%22%2C%22frame%22%3A%7B%22high%22%3A%22shop_images%2Fframe%2F%D0%93%D0%BB%D0%B8%D1%87%20%D1%80%D0%B0%D0%BC%D0%BA%D0%B0%2Fimage_d84b6210.webp%22%7D%2C%22avatar%22%3A%7B%22mid%22%3A%22users%2F420456%2Favatar_d11720e6.webp%22%2C%22high%22%3A%22users%2F420456%2Favatar_652a0af1.webp%22%7D%2C%22email%22%3A%22da120821%40gmail.com%22%2C%22is_staff%22%3Afalse%2C%22is_superuser%22%3Afalse%2C%22is_premium%22%3Atrue%2C%22can_buy_premium_type%22%3A2%7D"
+    },
+    {
+        "domain": ".remanga.org",
+        "expiry": 1791757520,
+        "httpOnly": false,
+        "name": "user",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "value": "%7B%22id%22%3A420456%2C%22username%22%3A%22Akira_Horu%22%2C%22frame%22%3A%7B%22high%22%3A%22shop_images%2Fframe%2F%D0%93%D0%BB%D0%B8%D1%87%20%D1%80%D0%B0%D0%BC%D0%BA%D0%B0%2Fimage_d84b6210.webp%22%7D%2C%22avatar%22%3A%7B%22mid%22%3A%22users%2F420456%2Favatar_d11720e6.webp%22%2C%22high%22%3A%22users%2F420456%2Favatar_652a0af1.webp%22%7D%2C%22email%22%3A%22da120821%40gmail.com%22%2C%22is_staff%22%3Afalse%2C%22is_superuser%22%3Afalse%2C%22is_premium%22%3Atrue%2C%22can_buy_premium_type%22%3A2%7D"
+    },
+    {
+        "domain": "remanga.org",
+        "expiry": 1791757495,
+        "httpOnly": true,
+        "name": "serverToken",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "value": "FI96fbqHJ8pQFgSUX37sINa8cCBUx5"
+    },
+    {
+        "domain": "remanga.org",
+        "expiry": 1791757495,
+        "httpOnly": true,
+        "name": "serverUser",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "value": "%22%7B%5C%22id%5C%22%3A420456%2C%5C%22username%5C%22%3A%5C%22Akira_Horu%5C%22%2C%5C%22frame%5C%22%3A%7B%5C%22high%5C%22%3A%5C%22shop_images%2Fframe%2F%D0%93%D0%BB%D0%B8%D1%87%20%D1%80%D0%B0%D0%BC%D0%BA%D0%B0%2Fimage_d84b6210.webp%5C%22%7D%2C%5C%22avatar%5C%22%3A%5C%22%2Fmedia%2Fusers%2F420456%2Favatar_1af35702.png%5C%22%2C%5C%22email%5C%22%3A%5C%22da120821%40gmail.com%5C%22%2C%5C%22is_staff%5C%22%3Afalse%2C%5C%22is_superuser%5C%22%3Afalse%2C%5C%22is_premium%5C%22%3Atrue%7D%22"
+    },
+    {
+        "domain": ".remanga.org",
+        "expiry": 1791494090,
+        "httpOnly": true,
+        "name": "serverToken",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "value": "FI96fbqHJ8pQFgSUX37sINa8cCBUx5"
+    },
+    {
+        "domain": ".remanga.org",
+        "expiry": 1791757467,
+        "httpOnly": false,
+        "name": "token",
+        "path": "/",
+        "sameSite": "Lax",
+        "secure": true,
+        "value": "FI96fbqHJ8pQFgSUX37sINa8cCBUx5"
+    }
+]
