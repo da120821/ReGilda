@@ -60,7 +60,7 @@ class DatabaseManager:
                 name VARCHAR(100) NOT NULL UNIQUE,
                 url VARCHAR(500) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            );
             """
             cursor.execute(create_table_sql)
             connection.commit()
@@ -201,7 +201,7 @@ class DatabaseManager:
               `last_updated` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
               PRIMARY KEY (`id`),
               UNIQUE KEY `unique_buster` (`user_name`, `sum`, `date_buster`)
-            ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            );
             """
             cursor.execute(create_table_sql)
             connection.commit()

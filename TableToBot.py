@@ -8,10 +8,7 @@ import pandas as pd
 from parser import parse_table
 import asyncio
 
-GUILD_URLS = {
-    "Филлиал": "https://remanga.org/guild/phillial/settings/donations",
-    "Иггдрасиль": "https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations"
-}
+GUILD_URLS = {}
 
 def create_choice_keyboard():
     """Создает клавиатуру для выборы показа таблицы"""

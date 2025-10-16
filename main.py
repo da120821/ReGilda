@@ -3,7 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 import asyncio
 from parser import parse_table
 from database import db_manager
-
+from TableToBot import GUILD_URLS
 # URL для веб-страниц гильдий
 GUILD_URLS = {}
 
