@@ -14,8 +14,10 @@ from database import db_manager
 edge_driver_path = r'Driver_Notes/msedgedriver.exe'
 cookies_file = 'cookies.json'
 
+
 def parse_table_for_service(url):
     return parse_table(url)
+
 
 def normalize_username(username):
     """Убираем префикс U из имен пользователей"""
@@ -107,6 +109,45 @@ def convert_amount_to_int(amount_str):
         return 0
 
 
+def extract_guild_name_from_url(url):
+    """Извлекает красивое название гильдии из URL"""
+    try:
+        # Извлекаем часть URL между /guild/ и /settings
+        match = re.search(r'/guild/([^/]+)', url)
+        if match:
+            guild_slug = match.group(1)
+
+            print(f"🔍 Извлекаем из URL: {guild_slug}")
+
+            # Убираем уникальный ID в конце (например, --a1172e3f)
+            guild_slug_clean = re.sub(r'--[a-f0-9]{8}$', '', guild_slug)
+
+            # Если после очистки осталась пустая строка, используем оригинальный slug
+            if not guild_slug_clean:
+                guild_slug_clean = guild_slug
+
+            # Преобразуем slug в читаемое название
+            # "i-g-g-d-r-a-s-i-l" → "Iggdrasil"
+            guild_name = guild_slug_clean.replace('-', ' ')
+
+            # Убираем лишние пробелы и делаем правильный title case
+            guild_name = ' '.join(word.capitalize() for word in guild_name.split())
+
+            # Специальная обработка для аббревиатур типа "I G G D R A S I L"
+            if len(guild_name) > 10 and ' ' in guild_name:
+                # Если много отдельных букв, пробуем объединить их
+                words = guild_name.split()
+                if all(len(word) == 1 for word in words):
+                    guild_name = ''.join(words).capitalize()
+
+            print(f"✅ Преобразовано в: '{guild_name}'")
+            return guild_name
+
+        return "Неизвестная гильдия"
+    except Exception as e:
+        print(f"❌ Ошибка извлечения названия гильдии: {e}")
+        return "Неизвестная гильдия"
+
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
     Парсит виртуализированную таблицу бустов
@@ -124,9 +165,18 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
     driver = webdriver.Edge(service=service, options=options)
     wait = WebDriverWait(driver, 120)
 
+    rows_data = []
+    seen_records = set()
+    previous_count = 0
+    no_new_count = 0
+    max_scroll_attempts = 50
+
     try:
+        # ВОССТАНАВЛИВАЕМ получение названия гильдии (только для отображения)
+        guild_name = extract_guild_name_from_url(url)
+
         # Открываем сайт
-        print("Открываем страницу...")
+        print(f"Открываем страницу гильдии '{guild_name}'...")
         driver.get(url)
 
         # Загружаем куки
@@ -148,15 +198,9 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         print("Ожидаем загрузки таблицы...")
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-sentry-component='VirtualizedDataTable']")))
 
-        # Хранилище данных
-        rows_data = []
-        seen_records = set()
-        previous_count = 0
-        no_new_count = 0
-        max_scroll_attempts = 50
-
         print("Начинаем сбор данных с прокруткой...")
 
+        # ⚡ ДОБАВЛЯЕМ ОСНОВНОЙ БЛОК ПАРСИНГА!
         for attempt in range(max_scroll_attempts):
             # Получаем HTML
             page_html = driver.page_source
@@ -250,26 +294,14 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
             print("🔄 Преобразуем суммы в числовой формат...")
             df['Сумма'] = df['Сумма'].apply(convert_amount_to_int)
 
-            # Выводим статистику по новым бустам
-            new_stats = db_manager.get_new_busters_stats(df)
-            if new_stats:
-                print("📊 Статистика собранных бустов:")
-                print(f"  - Всего собрано бустов: {len(df)}")
-                print(f"  - Новых бустов: {new_stats['new_busters_count']}")
-                print(f"  - Новых бустеров: {new_stats['new_busters_users_count']}")
-                print(f"  - Сумма новых бустов: {new_stats['new_busters_amount']:,} ⚡")
-                print(f"  - Дубликатов будет пропущено: {len(df) - new_stats['new_busters_count']}")
-            else:
-                print("📊 Статистика собранных бустов:")
-                print(f"  - Всего собрано бустов: {len(df)}")
-                print(f"  - Уникальных бустеров: {df['Пользователь'].nunique()}")
-                print(f"  - Общая сумма бустов: {df['Сумма'].sum():,} ⚡")
 
-            print("💾 Сохраняем данные бустов в базу данных...")
-            if db_manager.save_to_iggdrasil(df):
-                print("✅ Данные бустов успешно сохранены в БД")
-            else:
-                print("❌ Ошибка сохранения бустов в БД")
+
+            print("📊 Статистика собранных бустов:")
+            print(f"  - Всего собрано бустов: {len(df)}")
+            print(f"  - Уникальных бустеров: {df['Пользователь'].nunique()}")
+            print(f"  - Общая сумма бустов: {df['Сумма'].sum():,} ⚡")
+
+
 
             return df
         else:

@@ -5,13 +5,14 @@ from database import db_manager
 from datetime import datetime
 import asyncio
 import pandas as pd
-from parser import parse_table
+from parser import parse_table, extract_guild_name_from_url
 import asyncio
 
 GUILD_URLS = {}
 
+
 def create_choice_keyboard():
-    """Создает клавиатуру для выборы показа таблицы"""
+    """Создает клавиатуру для выбора показа таблицы"""
     keyboard = [
         [InlineKeyboardButton("✅ Да, показать всю таблицу", callback_data="show_full")],
         [InlineKeyboardButton("❌ Нет, хватит", callback_data="show_partial")]
@@ -170,12 +171,12 @@ def format_top_donators_from_db(db_data, top_n=20, show_all=False):
     return top_text
 
 
-async def send_all_donators(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_all_donators(update: Update, context: ContextTypes.DEFAULT_TYPE, guild_name: str):
     """Отправляет полный список всех бустеров"""
     query = update.callback_query
     await query.answer()
 
-    donations_data = db_manager.get_all_donations_grouped(limit=1000)
+    donations_data = db_manager.get_all_donations_grouped(guild_name, limit=1000)
 
     if not donations_data:
         await query.message.reply_text("❌ Нет данных о бустерах")
@@ -199,8 +200,8 @@ async def send_data_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     try:
         await update.message.reply_text(f"📊 Загружаю данные по гильдии {guild_name} из БД...")
 
-        donations_data = db_manager.get_all_donations_grouped()
-        db_stats = db_manager.get_detailed_stats()
+        donations_data = db_manager.get_all_donations_grouped(guild_name)
+        db_stats = db_manager.get_detailed_stats(guild_name)
 
         if not donations_data:
             await update.message.reply_text("❌ В базе данных пока нет записей")
@@ -237,6 +238,7 @@ async def send_data_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка загрузки данных: {e}")
 
+
 def format_top_donators_without_footer(db_data, top_n=20):
     """Форматирует топ бустеров БЕЗ текста '... и еще X бустеров'"""
     if not db_data:
@@ -261,6 +263,7 @@ def format_top_donators_without_footer(db_data, top_n=20):
     # УБИРАЕМ строку с "... и еще X бустеров"
     return top_text
 
+
 async def send_complete_data(update: Update, context: ContextTypes.DEFAULT_TYPE, df, web_page_url: str = None,
                              guild_name: str = None):
     """Отправляет все данные после парсинга"""
@@ -269,22 +272,22 @@ async def send_complete_data(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
 
     # Получаем статистику по новым бустам
-    new_stats = db_manager.get_new_busters_stats(df)
+    new_stats = db_manager.get_new_donations_stats(df, guild_name)
 
-    if new_stats and new_stats['new_busters_count'] > 0:
+    if new_stats and new_stats['new_donations_count'] > 0:
         new_stats_text = (
             f"<b>🆕 Новые бусты:</b>\n"
-            f"• Новых бустов: <code>{new_stats['new_busters_count']}</code>\n"
-            f"• Новых бустеров: <code>{new_stats['new_busters_users_count']}</code>\n"
-            f"• Сумма новых бустов: <code>{new_stats['new_busters_amount']:,} ⚡</code>\n\n"
+            f"• Новых бустов: <code>{new_stats['new_donations_count']}</code>\n"
+            f"• Новых бустеров: <code>{new_stats['new_donations_users_count']}</code>\n"
+            f"• Сумма новых бустов: <code>{new_stats['new_donations_amount']:,} ⚡</code>\n\n"
         )
         await update.message.reply_text(new_stats_text, parse_mode='HTML')
     else:
         await update.message.reply_text("ℹ️ Новых бустов не найдено", parse_mode='HTML')
 
     # Получаем обновленные данные из БД
-    donations_data = db_manager.get_all_donations_grouped()
-    db_stats = db_manager.get_detailed_stats()
+    donations_data = db_manager.get_all_donations_grouped(guild_name)
+    db_stats = db_manager.get_detailed_stats(guild_name)
 
     # Отправляем статистику
     stats_text = format_stats_from_db(db_stats)
@@ -317,12 +320,12 @@ async def send_complete_data(update: Update, context: ContextTypes.DEFAULT_TYPE,
     context.user_data['web_page_url'] = web_page_url
 
 
-async def send_full_table(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_full_table(update: Update, context: ContextTypes.DEFAULT_TYPE, guild_name: str):
     """Отправляет полную историю бустов из БД"""
     query = update.callback_query
     await query.answer()
 
-    all_donations = db_manager.get_all_donations()
+    all_donations = db_manager.get_all_donations(guild_name)
 
     if not all_donations:
         await query.message.reply_text("❌ В базе данных нет записей")
@@ -361,9 +364,10 @@ async def handle_table_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     data = query.data
+    guild_name = context.user_data.get('guild_name', 'Неизвестная гильдия')
 
     if data == "show_full":
-        await send_full_table(update, context)
+        await send_full_table(update, context, guild_name)
     elif data == "show_partial":
         await query.message.delete()
         await query.message.reply_text("✅ Хорошо! Если понадобится полная таблица - просто запросите данные снова.")
@@ -371,11 +375,16 @@ async def handle_table_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.delete()
 
 
-
-
 async def handle_show_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки 'Показать всех'"""
-    await send_all_donators(update, context)
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    guild_name = data.replace('show_all_', '')
+
+    await send_all_donators(update, context, guild_name)
+
 
 async def show_guilds_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает список доступных гильдий"""
@@ -387,6 +396,7 @@ async def show_guilds_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     guilds_text += f"\nВсего гильдий: {len(GUILD_URLS)}"
 
     await update.message.reply_text(guilds_text)
+
 
 async def gettable(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str, guild_name: str):
     """Функция для получения таблицы"""
@@ -401,6 +411,8 @@ async def gettable(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str,
     await message_func("⏳ Начинаю извлечение данных таблицы... это займет около 2 мин")
 
     try:
+
+        # Используем функцию parse_table из parser.py
         df = await asyncio.to_thread(parse_table, url)
 
         if df.empty:
@@ -414,4 +426,3 @@ async def gettable(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str,
 
     except Exception as e:
         await message_func(f"❌ Произошла ошибка: {e}")
-

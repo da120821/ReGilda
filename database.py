@@ -31,7 +31,7 @@ class DatabaseManager:
             return None
 
     def setup_database(self):
-        """Настраивает базу данных и таблицу"""
+        """Настраивает базу данных и все необходимые таблицы"""
         logger.info("🔧 Настройка базы данных...")
 
         # Проверяем и создаем базу данных
@@ -39,11 +39,17 @@ class DatabaseManager:
             if not self.create_database():
                 return False
 
-        # Проверяем и создаем таблицу
-        if not self.check_table_exists():
-            if not self.create_table():
-                return False
+        # Создаем таблицу гильдий
+        if not self.setup_guilds_table():
+            return False
 
+        logger.info("✅ База данных настроена")
+        return True
+
+    def ensure_guild_table_exists(self, guild_name: str):
+        """Гарантирует, что таблица для гильдии существует (создает если нет)"""
+        if not self.check_donation_table_exists(guild_name):
+            return self.create_donation_table(guild_name)
         return True
 
     def setup_guilds_table(self):
@@ -59,7 +65,8 @@ class DatabaseManager:
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL UNIQUE,
                 url VARCHAR(500) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE
             );
             """
             cursor.execute(create_table_sql)
@@ -74,17 +81,20 @@ class DatabaseManager:
                 connection.close()
 
     def save_guild(self, guild_name: str, url: str):
-        """Сохраняет гильдию в БД"""
+        """Сохраняет гильдию в БД и создает для нее таблицу донатов"""
         connection = self.connect()
         if not connection:
             return False
 
         try:
             cursor = connection.cursor()
-            sql = "INSERT INTO guilds (name, url) VALUES (%s, %s)"
+            sql = "INSERT INTO guilds (name, url) VALUES (%s, %s) ON DUPLICATE KEY UPDATE url = VALUES(url), is_active = TRUE"
             cursor.execute(sql, (guild_name, url))
             connection.commit()
             logger.info(f"✅ Гильдия '{guild_name}' сохранена в БД")
+
+            # Создаем таблицу для донатов этой гильдии
+            self.ensure_guild_table_exists(guild_name)
             return True
         except Error as e:
             logger.error(f"❌ Ошибка сохранения гильдии '{guild_name}': {e}")
@@ -94,14 +104,14 @@ class DatabaseManager:
                 connection.close()
 
     def load_all_guilds(self):
-        """Загружает все гильдии из БД"""
+        """Загружает все активные гильдии из БД"""
         connection = self.connect()
         if not connection:
             return {}
 
         try:
             cursor = connection.cursor()
-            sql = "SELECT name, url FROM guilds ORDER BY name"
+            sql = "SELECT name, url FROM guilds WHERE is_active = TRUE ORDER BY name"
             cursor.execute(sql)
             guilds = {name: url for name, url in cursor.fetchall()}
             logger.info(f"✅ Загружено {len(guilds)} гильдий из БД")
@@ -112,6 +122,52 @@ class DatabaseManager:
         finally:
             if connection.is_connected():
                 connection.close()
+
+    def get_safe_table_name(self, guild_name: str) -> str:
+        """Создает безопасное имя таблицы из названия гильдии"""
+        try:
+            # Нормализуем название - убираем ID и лишние пробелы
+            normalized_name = guild_name.strip().lower()
+            normalized_name = re.sub(r'\s+--[a-f0-9]{8}$', '', normalized_name)
+
+            # Транслитерируем кириллицу в латиницу
+            translit_map = {
+                'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+                'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+                'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+                'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '',
+                'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+            }
+
+            # Транслитерируем
+            latin_name = ''
+            for char in normalized_name:
+                if char in translit_map:
+                    latin_name += translit_map[char]
+                elif char.isalnum() or char == ' ':
+                    latin_name += char
+                else:
+                    latin_name += '_'
+
+            # Заменяем пробелы на подчеркивания и убираем лишнее
+            safe_name = latin_name.replace(' ', '_')
+            safe_name = re.sub(r'[^a-zA-Z0-9_]', '', safe_name)
+            safe_name = re.sub(r'_+', '_', safe_name).strip('_')
+
+            if not safe_name:
+                safe_name = 'unknown_guild'
+
+            if safe_name and safe_name[0].isdigit():
+                safe_name = 'g_' + safe_name
+
+            safe_name = 'donations_' + safe_name
+
+            logger.info(f"🔧 Создано имя таблицы: '{guild_name}' -> '{safe_name}'")
+            return safe_name
+
+        except Exception as e:
+            logger.error(f"Ошибка создания имени таблицы: {e}")
+            return 'donations_unknown_guild'
 
     def check_database_exists(self):
         """Проверяет существование базы данных"""
@@ -158,22 +214,23 @@ class DatabaseManager:
             logger.error(f"❌ Не удалось создать базу данных: {e}")
             return False
 
-    def check_table_exists(self):
-        """Проверяет существование таблицы"""
+    def check_donation_table_exists(self, guild_name: str):
+        """Проверяет существование таблицы донатов для гильдии"""
         connection = self.connect()
         if not connection:
             return False
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor()
-            cursor.execute("SHOW TABLES LIKE 'iggdrasil'")
+            cursor.execute("SHOW TABLES LIKE %s", (table_name,))
             result = cursor.fetchone()
             exists = result is not None
 
             if exists:
-                logger.info("✅ Таблица iggdrasil существует")
+                logger.debug(f"✅ Таблица {table_name} существует")
             else:
-                logger.info("❌ Таблица iggdrasil не существует")
+                logger.info(f"📋 Таблица {table_name} не существует")
 
             return exists
         except Error as e:
@@ -183,8 +240,8 @@ class DatabaseManager:
             if connection.is_connected():
                 connection.close()
 
-    def create_table(self):
-        """Создает таблицу"""
+    def create_donation_table(self, guild_name: str):
+        """Создает таблицу донатов для конкретной гильдии"""
         connection = self.connect()
         if not connection:
             return False
@@ -192,45 +249,53 @@ class DatabaseManager:
         try:
             cursor = connection.cursor()
 
-            create_table_sql = """
-            CREATE TABLE IF NOT EXISTS `iggdrasil` (
+            # Создаем безопасное имя таблицы
+            table_name = self.get_safe_table_name(guild_name)
+
+            create_table_sql = f"""
+            CREATE TABLE IF NOT EXISTS `{table_name}` (
               `id` int NOT NULL AUTO_INCREMENT,
               `user_name` varchar(25) DEFAULT NULL,
               `sum` int DEFAULT NULL,
               `date_buster` date DEFAULT NULL,
               `last_updated` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
               PRIMARY KEY (`id`),
-              UNIQUE KEY `unique_buster` (`user_name`, `sum`, `date_buster`)
+              UNIQUE KEY `unique_buster_{table_name}` (`user_name`, `sum`, `date_buster`)
             );
             """
             cursor.execute(create_table_sql)
             connection.commit()
-            logger.info("✅ Таблица iggdrasil создана")
+            logger.info(f"✅ Таблица донатов {table_name} создана для гильдии '{guild_name}'")
             return True
 
         except Error as e:
-            logger.error(f"❌ Ошибка при создании таблицы: {e}")
+            logger.error(f"❌ Ошибка при создании таблицы {table_name}: {e}")
             return False
         finally:
             if connection.is_connected():
                 connection.close()
 
-    def get_detailed_stats(self):
-        """Получает детальную статистику из БД"""
+    def get_detailed_stats(self, guild_name: str):
+        """Получает детальную статистику для конкретной гильдии"""
+        # Гарантируем, что таблица существует
+        if not self.ensure_guild_table_exists(guild_name):
+            return None
+
         connection = self.connect()
         if not connection:
             return None
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor(dictionary=True)
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     COUNT(*) as total_transactions,
                     COUNT(DISTINCT user_name) as unique_users,
                     SUM(sum) as total_amount,
                     MAX(last_updated) as last_update
-                FROM iggdrasil
+                FROM `{table_name}`
             """)
             stats = cursor.fetchone()
 
@@ -242,18 +307,23 @@ class DatabaseManager:
             return stats
 
         except Error as e:
-            logger.error(f"Ошибка при получении статистики: {e}")
+            logger.error(f"Ошибка при получении статистики для {guild_name}: {e}")
             return None
         finally:
             if connection.is_connected():
                 connection.close()
 
-    def save_to_iggdrasil(self, df):
-        """Сохраняет только новые бусты в БД (без дубликатов)"""
-        logger.info(f"💾 Сохраняем {len(df)} записей в БД с проверкой дубликатов")
+    def save_donations(self, df, guild_name: str):
+        """Сохраняет донаты в таблицу указанной гильдии (автоматически создает таблицу если нужно)"""
+        logger.info(f"💾 Сохраняем {len(df)} записей в таблицу гильдии {guild_name}")
 
         if not self.setup_database():
-            logger.error("❌ Не удалось настроить базу данных")
+            logger.error(f"❌ Не удалось настроить базу данных")
+            return False
+
+        # Гарантируем, что таблица для гильдии существует
+        if not self.ensure_guild_table_exists(guild_name):
+            logger.error(f"❌ Не удалось создать таблицу для гильдии {guild_name}")
             return False
 
         connection = self.connect()
@@ -261,13 +331,14 @@ class DatabaseManager:
             return False
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor()
             saved_count = 0
             skipped_count = 0
             error_count = 0
 
-            # Получаем существующие бусты для проверки дубликатов
-            existing_busters = self.get_existing_busters_set()
+            # Получаем существующие донаты для проверки дубликатов
+            existing_donations = self.get_existing_donations_set(guild_name)
 
             for _, row in df.iterrows():
                 try:
@@ -275,24 +346,24 @@ class DatabaseManager:
                     amount = row['Сумма']
                     date = self.parse_date(row['Дата'])
 
-                    # Создаем уникальный идентификатор буста
-                    bust_id = f"{user_name}|{amount}|{date}"
+                    # Создаем уникальный идентификатор доната
+                    donation_id = f"{user_name}|{amount}|{date}"
 
-                    # Проверяем, есть ли уже такой буст в БД
-                    if bust_id in existing_busters:
+                    # Проверяем, есть ли уже такой донат в БД
+                    if donation_id in existing_donations:
                         skipped_count += 1
                         continue
 
-                    # Сохраняем только новый буст
-                    insert_sql = """
-                    INSERT INTO iggdrasil (user_name, sum, date_buster)
+                    # Сохраняем только новый донат
+                    insert_sql = f"""
+                    INSERT INTO `{table_name}` (user_name, sum, date_buster)
                     VALUES (%s, %s, %s)
                     """
                     cursor.execute(insert_sql, (user_name, amount, date))
                     saved_count += 1
 
                     # Добавляем в множество, чтобы избежать дубликатов в текущей сессии
-                    existing_busters.add(bust_id)
+                    existing_donations.add(donation_id)
 
                 except Exception as e:
                     logger.error(f"❌ Ошибка сохранения {row['Пользователь']}: {e}")
@@ -300,7 +371,7 @@ class DatabaseManager:
 
             connection.commit()
             logger.info(
-                f"✅ Сохранено новых бустов: {saved_count}, пропущено дубликатов: {skipped_count}, ошибок: {error_count}")
+                f"✅ В таблицу {guild_name} сохранено: {saved_count} новых, пропущено: {skipped_count} дубликатов, ошибок: {error_count}")
 
             return True
 
@@ -312,64 +383,69 @@ class DatabaseManager:
             if connection.is_connected():
                 connection.close()
 
-    def get_existing_busters_set(self):
-        """Получает множество существующих бустов для проверки дубликатов"""
+    def get_existing_donations_set(self, guild_name: str):
+        """Получает множество существующих донатов для конкретной гильдии"""
+        # Гарантируем, что таблица существует
+        if not self.ensure_guild_table_exists(guild_name):
+            return set()
+
         connection = self.connect()
         if not connection:
             return set()
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor()
-            cursor.execute("SELECT user_name, sum, date_buster FROM iggdrasil")
+            cursor.execute(f"SELECT user_name, sum, date_buster FROM `{table_name}`")
             existing_records = cursor.fetchall()
 
-            existing_busters = set()
+            existing_donations = set()
             for user_name, amount, date in existing_records:
-                bust_id = f"{user_name}|{amount}|{date}"
-                existing_busters.add(bust_id)
+                donation_id = f"{user_name}|{amount}|{date}"
+                existing_donations.add(donation_id)
 
-            logger.info(f"📊 Загружено {len(existing_busters)} существующих бустов для проверки")
-            return existing_busters
+            logger.info(f"📊 Загружено {len(existing_donations)} существующих донатов для гильдии {guild_name}")
+            return existing_donations
 
         except Error as e:
-            logger.error(f"Ошибка при получении существующих бустов: {e}")
+            logger.error(f"Ошибка при получении существующих донатов: {e}")
             return set()
         finally:
             if connection.is_connected():
                 connection.close()
 
-    def get_new_busters_stats(self, df):
-        """Получает статистику по новым бустам (которые будут добавлены)"""
+    def get_new_donations_stats(self, df, guild_name: str):
+        """Получает статистику по новым донатам для конкретной гильдии"""
         if df.empty:
             return None
 
         try:
-            existing_busters = self.get_existing_busters_set()
+            existing_donations = self.get_existing_donations_set(guild_name)
 
-            new_busters_count = 0
-            new_busters_amount = 0
-            new_busters_users = set()
+            new_donations_count = 0
+            new_donations_amount = 0
+            new_donations_users = set()
 
             for _, row in df.iterrows():
                 user_name = str(row['Пользователь'])[:25]
                 amount = row['Сумма']
                 date = self.parse_date(row['Дата'])
 
-                bust_id = f"{user_name}|{amount}|{date}"
+                donation_id = f"{user_name}|{amount}|{date}"
 
-                if bust_id not in existing_busters:
-                    new_busters_count += 1
-                    new_busters_amount += amount
-                    new_busters_users.add(user_name)
+                if donation_id not in existing_donations:
+                    new_donations_count += 1
+                    new_donations_amount += amount
+                    new_donations_users.add(user_name)
 
             return {
-                'new_busters_count': new_busters_count,
-                'new_busters_amount': new_busters_amount,
-                'new_busters_users_count': len(new_busters_users)
+                'new_donations_count': new_donations_count,
+                'new_donations_amount': new_donations_amount,
+                'new_donations_users_count': len(new_donations_users)
             }
 
         except Exception as e:
-            logger.error(f"Ошибка при получении статистики новых бустов: {e}")
+            logger.error(f"Ошибка при получении статистики новых донатов: {e}")
             return None
 
     def parse_date(self, date_str):
@@ -393,92 +469,135 @@ class DatabaseManager:
         except:
             return "2025-01-01"
 
-    def get_all_donations(self):
-        """Получает все бусты из БД"""
+    def get_all_donations(self, guild_name: str):
+        """Получает все донаты из таблицы гильдии"""
+        # Гарантируем, что таблица существует
+        if not self.ensure_guild_table_exists(guild_name):
+            return None
+
         connection = self.connect()
         if not connection:
             return None
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor(dictionary=True)
-            sql = "SELECT user_name, sum, date_buster FROM iggdrasil ORDER BY date_buster DESC, user_name ASC"
+            sql = f"SELECT user_name, sum, date_buster FROM `{table_name}` ORDER BY date_buster DESC, user_name ASC"
             cursor.execute(sql)
             donations = cursor.fetchall()
-            logger.info(f"📊 Получено {len(donations)} записей из БД")
+            logger.info(f"📊 Получено {len(donations)} записей из таблицы {guild_name}")
             return donations
         except Error as e:
-            logger.error(f"Ошибка при получении данных из БД: {e}")
+            logger.error(f"Ошибка при получении данных из таблицы {guild_name}: {e}")
             return None
         finally:
             if connection.is_connected():
                 connection.close()
 
-    def get_all_donations_grouped(self, limit=50):
-        """Получает бусты из БД с группировкой по пользователям"""
+    def get_all_donations_grouped(self, guild_name: str, limit=50):
+        """Получает донаты из таблицы гильдии с группировкой по пользователям"""
+        # Гарантируем, что таблица существует
+        if not self.ensure_guild_table_exists(guild_name):
+            return None
+
         connection = self.connect()
         if not connection:
             return None
 
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor()
-            sql = """
+            sql = f"""
             SELECT 
                 user_name,
                 SUM(sum) as total_donated,
                 COUNT(*) as donation_count
-            FROM iggdrasil 
+            FROM `{table_name}` 
             GROUP BY user_name 
             ORDER BY total_donated DESC
             LIMIT %s
             """
             cursor.execute(sql, (limit,))
             donations = cursor.fetchall()
-            logger.info(f"📊 Получено {len(donations)} группированных записей из БД")
+            logger.info(f"📊 Получено {len(donations)} группированных записей из таблицы {guild_name}")
             return donations
         except Error as e:
-            logger.error(f"Ошибка при получении группированных данных из БД: {e}")
+            logger.error(f"Ошибка при получении группированных данных из таблицы {guild_name}: {e}")
             return None
         finally:
             if connection.is_connected():
                 connection.close()
 
-    def clean_duplicates(self):
-        """Очищает дубликаты из БД"""
+    def clean_duplicates(self, guild_name: str):
+        """Очищает дубликаты из таблицы гильдии"""
+        # Гарантируем, что таблица существует
+        if not self.ensure_guild_table_exists(guild_name):
+            return False
+
         connection = self.connect()
         try:
+            table_name = self.get_safe_table_name(guild_name)
             cursor = connection.cursor()
 
             # Создаем временную таблицу без дубликатов
-            cursor.execute("""
-                CREATE TEMPORARY TABLE temp_iggdrasil AS
+            cursor.execute(f"""
+                CREATE TEMPORARY TABLE temp_{table_name} AS
                 SELECT DISTINCT user_name, sum, date_buster 
-                FROM iggdrasil
+                FROM `{table_name}`
             """)
 
             # Очищаем основную таблицу
-            cursor.execute("DELETE FROM iggdrasil")
+            cursor.execute(f"DELETE FROM `{table_name}`")
 
             # Восстанавливаем данные без дубликатов
-            cursor.execute("""
-                INSERT INTO iggdrasil (user_name, sum, date_buster)
-                SELECT user_name, sum, date_buster FROM temp_iggdrasil
+            cursor.execute(f"""
+                INSERT INTO `{table_name}` (user_name, sum, date_buster)
+                SELECT user_name, sum, date_buster FROM temp_{table_name}
             """)
 
             connection.commit()
 
-            cursor.execute("SELECT COUNT(*) FROM iggdrasil")
+            cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
             new_count = cursor.fetchone()[0]
 
-            logger.info(f"✅ База очищена от дубликатов. Осталось записей: {new_count}")
+            logger.info(f"✅ Таблица {guild_name} очищена от дубликатов. Осталось записей: {new_count}")
             return True
 
         except Error as e:
-            logger.error(f"❌ Ошибка очистки: {e}")
+            logger.error(f"❌ Ошибка очистки таблицы {guild_name}: {e}")
             return False
         finally:
             if connection.is_connected():
                 connection.close()
 
+    def delete_guild(self, guild_name: str):
+        """Удаляет гильдию из БД и её таблицу донатов"""
+        connection = self.connect()
+        if not connection:
+            return False
+
+        try:
+            cursor = connection.cursor()
+
+            # 1. Удаляем запись из таблицы guilds
+            delete_sql = "DELETE FROM guilds WHERE name = %s"
+            cursor.execute(delete_sql, (guild_name,))
+
+            # 2. Удаляем таблицу донатов этой гильдии
+            table_name = self.get_safe_table_name(guild_name)
+            drop_table_sql = f"DROP TABLE IF EXISTS `{table_name}`"
+            cursor.execute(drop_table_sql)
+
+            connection.commit()
+            logger.info(f"✅ Гильдия '{guild_name}' и её таблица удалены из БД")
+            return True
+
+        except Error as e:
+            logger.error(f"❌ Ошибка удаления гильдии '{guild_name}': {e}")
+            return False
+        finally:
+            if connection.is_connected():
+                connection.close()
 
 # Создаем экземпляр менеджера базы данных
 db_manager = DatabaseManager()
