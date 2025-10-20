@@ -494,6 +494,35 @@ class DatabaseManager:
             if connection.is_connected():
                 connection.close()
 
+    def delete_guild(self, guild_name: str):
+        """Удаляет гильдию из БД и её таблицу донатов"""
+        connection = self.connect()
+        if not connection:
+            return False
+
+        try:
+            cursor = connection.cursor()
+
+            # 1. Удаляем запись из таблицы guilds
+            delete_sql = "DELETE FROM guilds WHERE name = %s"
+            cursor.execute(delete_sql, (guild_name,))
+
+            # 2. Удаляем таблицу донатов этой гильдии
+            table_name = self.get_safe_table_name(guild_name)
+            drop_table_sql = f"DROP TABLE IF EXISTS `{table_name}`"
+            cursor.execute(drop_table_sql)
+
+            connection.commit()
+            logger.info(f"✅ Гильдия '{guild_name}' и её таблица удалены из БД")
+            return True
+
+        except Error as e:
+            logger.error(f"❌ Ошибка удаления гильдии '{guild_name}': {e}")
+            return False
+        finally:
+            if connection.is_connected():
+                connection.close()
+
     def get_all_donations_grouped(self, guild_name: str, limit=50):
         """Получает донаты из таблицы гильдии с группировкой по пользователям"""
         # Гарантируем, что таблица существует

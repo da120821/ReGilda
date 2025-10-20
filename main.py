@@ -26,7 +26,7 @@ def create_guilds_keyboard():
         buttons.append(row)
 
     buttons.append([KeyboardButton("➕ Добавить гильдию")])
-    buttons.append([KeyboardButton("🗑️ Удалить гильдию")])
+    buttons.append([KeyboardButton("⌫ Удалить гильдию")])
 
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
@@ -114,7 +114,7 @@ async def handle_guild_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         await send_data_from_db(update, context, text)
     elif text == "➕ Добавить гильдию":
         await handle_add_guild(update, context)
-    elif text == "🗑️ Удалить гильдию":
+    elif text == "⌫ Удалить гильдию":
         await handle_delete_guild(update, context)
     else:
         await update.message.reply_text("Пожалуйста, используйте кнопки для выбора действия")
@@ -160,12 +160,12 @@ async def handle_delete_guild(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     keyboard = []
     for guild_name in GUILD_URLS.keys():
-        keyboard.append([InlineKeyboardButton(f"🗑️ {guild_name}", callback_data=f"delete_{guild_name}")])
+        keyboard.append([InlineKeyboardButton(f"⌫ {guild_name}", callback_data=f"delete_{guild_name}")])
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_delete")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "🗑️ Выберите гильдию для удаления:",
+        "⌫ Выберите гильдию для удаления:",
         reply_markup=reply_markup
     )
 

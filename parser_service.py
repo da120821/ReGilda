@@ -86,6 +86,6 @@ print(f"⏳ Ожидаем первого запуска...")
 try:
     while True:
         schedule.run_pending()
-        time.sleep(300)  # Проверяем каждые 30 секунд
+        time.sleep(60)  # Проверяем каждые 30 секунд
 except KeyboardInterrupt:
     print("\n⏹️ Сервис парсинга остановлен")

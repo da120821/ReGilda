@@ -2,10 +2,8 @@ import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import db_manager
-from datetime import datetime
-import asyncio
 import pandas as pd
-from parser import parse_table, extract_guild_name_from_url
+from parser import parse_table
 import asyncio
 
 GUILD_URLS = {}
