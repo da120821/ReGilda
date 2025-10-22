@@ -1,4 +1,3 @@
-# main.py
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import asyncio
@@ -6,6 +5,9 @@ from database import db_manager
 from TableToBot import GUILD_URLS, send_data_from_db, handle_table_choice, handle_show_all, gettable
 import time
 from collections import defaultdict
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # URL для веб-страниц гильдий
 GUILD_URLS = {}
@@ -356,7 +358,11 @@ if __name__ == '__main__':
     db_manager.setup_guilds_table()
     load_guilds_from_db()
 
-    TOKEN = '8145185481:AAFBUZVvdQ0Hmo3ePKJF10fWT384jyduvjw'
+    TOKEN = os.getenv('BOT_TOKEN')
+    if not TOKEN:
+        print("❌ Ошибка: BOT_TOKEN не установлен в переменных окружения")
+        exit(1)
+
     application = ApplicationBuilder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))

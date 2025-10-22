@@ -1,6 +1,9 @@
 from selenium import webdriver
-from selenium.webdriver.edge.service import Service
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 import json
+import time
+
 
 # Путь к драйверу
 edge_driver_path = r'Driver_Notes/msedgedriver.exe'

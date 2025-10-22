@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
 import pandas as pd
@@ -162,7 +163,7 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
 
-    service = Service()  # Без пути - использует системный Chrome
+    service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     wait = WebDriverWait(driver, 120)
 
