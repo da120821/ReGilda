@@ -1,3 +1,4 @@
+# TableToBot.py
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -5,10 +6,122 @@ from database import db_manager
 import pandas as pd
 from parser import parse_table
 import asyncio
+import time
+from collections import defaultdict
 
 GUILD_URLS = {}
 
+# Система блокировки для парсинга
+parse_processing = defaultdict(bool)
+PARSE_COOLDOWN = 60  # 1 минута кд между парсингами для одного пользователя
 
+
+def is_parse_processing(user_id: int) -> bool:
+    """Проверяет, выполняется ли парсинг для пользователя"""
+    return parse_processing.get(user_id, False)
+
+
+def set_parse_processing(user_id: int, status: bool):
+    """Устанавливает статус парсинга для пользователя"""
+    parse_processing[user_id] = status
+
+
+async def send_data_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE, guild_name: str):
+    """Отправляет данные из БД"""
+    user_id = update.effective_user.id
+
+    try:
+        await update.message.reply_text(f"📊 Загружаю данные по гильдии {guild_name} из БД...")
+
+        donations_data = db_manager.get_all_donations_grouped(guild_name)
+        db_stats = db_manager.get_detailed_stats(guild_name)
+
+        if not donations_data:
+            await update.message.reply_text("❌ В базе данных пока нет записей")
+            return
+
+        # Отправляем статистику из БД (отдельным сообщением)
+        stats_text = format_stats_from_db(db_stats)
+        await update.message.reply_text(stats_text, parse_mode='HTML')
+
+        # Создаем ОДНО сообщение с топом бустеров и кнопками
+        top_text = format_top_donators_from_db(donations_data, 20, show_all=False)
+        # Убираем строку с "... и еще X бустеров"
+        top_text = top_text.split('\n<i>... и еще')[0]
+
+        # Добавляем информацию о дате и кнопки в то же сообщение
+        full_message = (
+            f"{top_text}\n\n"
+            f"📅 Данные актуальны на: {db_stats['last_update']}\n"
+            "Выберите действие:"
+        )
+
+        show_more_keyboard = create_show_more_keyboard(guild_name)
+
+        # Отправляем ВСЕ в одном сообщении
+        await update.message.reply_text(
+            full_message,
+            parse_mode='HTML',
+            reply_markup=show_more_keyboard
+        )
+
+        # Сохраняем данные в контексте
+        context.user_data['guild_name'] = guild_name
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка загрузки данных: {e}")
+    finally:
+        # Разблокируем пользователя после завершения
+        from main import set_user_processing
+        set_user_processing(user_id, False)
+
+
+async def gettable(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str, guild_name: str):
+    """Функция для получения таблицы"""
+    # Определяем откуда пришел запрос - из message или callback_query
+    if hasattr(update, 'message') and update.message:
+        message_func = update.message.reply_text
+        user_id = update.message.from_user.id
+    elif hasattr(update, 'callback_query') and update.callback_query:
+        message_func = update.callback_query.message.reply_text
+        user_id = update.callback_query.from_user.id
+    else:
+        return  # Если ничего не нашли, выходим
+
+    # Проверка кд для парсинга
+    if is_parse_processing(user_id):
+        await message_func("⏳ Парсинг уже выполняется. Пожалуйста, дождитесь завершения...")
+        return
+
+    # Устанавливаем статус парсинга
+    set_parse_processing(user_id, True)
+
+    try:
+        await message_func("⏳ Начинаю извлечение данных таблицы... это займет около 2 мин")
+
+        # Используем функцию parse_table из parser.py
+        df = await asyncio.to_thread(parse_table, url)
+
+        if df.empty:
+            await message_func("❌ Не удалось получить данные таблицы")
+            return
+
+        await message_func("✅ Таблица успешно получена!")
+
+        web_page_url = url
+        await send_complete_data(update, context, df, web_page_url, guild_name)
+
+    except Exception as e:
+        await message_func(f"❌ Произошла ошибка: {e}")
+    finally:
+        # Разблокируем парсинг для пользователя
+        set_parse_processing(user_id, False)
+        # Разблокируем пользователя в основной системе
+        from main import set_user_processing
+        set_user_processing(user_id, False)
+
+
+# Остальные функции остаются без изменений...
 def create_choice_keyboard():
     """Создает клавиатуру для выбора показа таблицы"""
     keyboard = [
@@ -193,50 +306,6 @@ async def send_all_donators(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     await query.message.delete()
 
 
-async def send_data_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE, guild_name: str):
-    """Отправляет данные из БД"""
-    try:
-        await update.message.reply_text(f"📊 Загружаю данные по гильдии {guild_name} из БД...")
-
-        donations_data = db_manager.get_all_donations_grouped(guild_name)
-        db_stats = db_manager.get_detailed_stats(guild_name)
-
-        if not donations_data:
-            await update.message.reply_text("❌ В базе данных пока нет записей")
-            return
-
-        # Отправляем статистику из БД (отдельным сообщением)
-        stats_text = format_stats_from_db(db_stats)
-        await update.message.reply_text(stats_text, parse_mode='HTML')
-
-        # Создаем ОДНО сообщение с топом бустеров и кнопками
-        top_text = format_top_donators_from_db(donations_data, 20, show_all=False)
-        # Убираем строку с "... и еще X бустеров"
-        top_text = top_text.split('\n<i>... и еще')[0]
-
-        # Добавляем информацию о дате и кнопки в то же сообщение
-        full_message = (
-            f"{top_text}\n\n"
-            f"📅 Данные актуальны на: {db_stats['last_update']}\n"
-            "Выберите действие:"
-        )
-
-        show_more_keyboard = create_show_more_keyboard(guild_name)
-
-        # Отправляем ВСЕ в одном сообщении
-        await update.message.reply_text(
-            full_message,
-            parse_mode='HTML',
-            reply_markup=show_more_keyboard
-        )
-
-        # Сохраняем данные в контексте
-        context.user_data['guild_name'] = guild_name
-
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка загрузки данных: {e}")
-
-
 def format_top_donators_without_footer(db_data, top_n=20):
     """Форматирует топ бустеров БЕЗ текста '... и еще X бустеров'"""
     if not db_data:
@@ -394,33 +463,3 @@ async def show_guilds_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     guilds_text += f"\nВсего гильдий: {len(GUILD_URLS)}"
 
     await update.message.reply_text(guilds_text)
-
-
-async def gettable(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str, guild_name: str):
-    """Функция для получения таблицы"""
-    # Определяем откуда пришел запрос - из message или callback_query
-    if hasattr(update, 'message') and update.message:
-        message_func = update.message.reply_text
-    elif hasattr(update, 'callback_query') and update.callback_query:
-        message_func = update.callback_query.message.reply_text
-    else:
-        return  # Если ничего не нашли, выходим
-
-    await message_func("⏳ Начинаю извлечение данных таблицы... это займет около 2 мин")
-
-    try:
-
-        # Используем функцию parse_table из parser.py
-        df = await asyncio.to_thread(parse_table, url)
-
-        if df.empty:
-            await message_func("❌ Не удалось получить данные таблицы")
-            return
-
-        await message_func("✅ Таблица успешно получена!")
-
-        web_page_url = url
-        await send_complete_data(update, context, df, web_page_url, guild_name)
-
-    except Exception as e:
-        await message_func(f"❌ Произошла ошибка: {e}")

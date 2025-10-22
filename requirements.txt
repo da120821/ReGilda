@@ -1,0 +1,8 @@
+python-telegram-bot==20.7
+selenium==4.15.0
+pandas==2.1.3
+mysql-connector-python==8.2.0
+beautifulsoup4==4.12.2
+schedule==1.2.0
+lxml==4.9.3
+python-dotenv==1.0.0

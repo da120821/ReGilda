@@ -1,7 +1,7 @@
 from selenium import webdriver
-from selenium.webdriver.edge.service import Service
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.edge.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
@@ -11,7 +11,9 @@ import pandas as pd
 import re
 from database import db_manager
 
-edge_driver_path = r'Driver_Notes/msedgedriver.exe'
+
+
+
 cookies_file = 'cookies.json'
 
 
@@ -157,12 +159,11 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
-    options.add_argument(
-        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
-    service = Service(edge_driver_path)
-    driver = webdriver.Edge(service=service, options=options)
+    service = Service()  # Без пути - использует системный Chrome
+    driver = webdriver.Chrome(service=service, options=options)
     wait = WebDriverWait(driver, 120)
 
     rows_data = []
