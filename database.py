@@ -113,7 +113,7 @@ class DatabaseManager:
 
         try:
             cursor = connection.cursor()
-            sql = "SELECT name, url FROM guilds WHERE is_active = TRUE ORDER BY name"
+            sql = "SELECT name, url FROM guilds ORDER BY name"
             cursor.execute(sql)
             guilds = {name: url for name, url in cursor.fetchall()}
             logger.info(f"✅ Загружено {len(guilds)} гильдий из БД")
