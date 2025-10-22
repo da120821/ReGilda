@@ -10,7 +10,7 @@ import time
 import json
 import pandas as pd
 import re
-from database import db_manager
+import os
 
 
 
@@ -184,10 +184,26 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         # Загружаем куки
         print("Загружаем куки...")
         try:
-            with open(cookies_file, 'r') as file:
-                cookies = json.load(file)
-            for cookie in cookies:
-                driver.add_cookie(cookie)
+            cookies = None
+
+            # Сначала пробуем из переменной окружения
+            cookies_json = os.getenv('COOKIES_JSON')
+            if cookies_json:
+                cookies = json.loads(cookies_json)
+                print("✅ Куки загружены из переменных окружения")
+            else:
+                # Иначе из файла
+                with open(cookies_file, 'r') as file:
+                    cookies = json.load(file)
+                print("✅ Куки загружены из файла")
+
+            # Добавляем куки в браузер
+            if cookies:
+                for cookie in cookies:
+                    driver.add_cookie(cookie)
+            else:
+                print("❌ Куки не загружены!")
+
         except Exception as e:
             print(f"Ошибка загрузки куки: {e}")
 
