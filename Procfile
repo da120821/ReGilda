@@ -1,2 +1,2 @@
-main: python main.py
-parser_service: python parser_service.py
+worker: python main.py
+parser: python parser_service.py
