@@ -1,6 +1,6 @@
 python-telegram-bot==20.7
 selenium==4.15.0
-pandas==2.1.3
+pandas==2.2.1
 mysql-connector-python==8.2.0
 beautifulsoup4==4.12.2
 schedule==1.2.0
