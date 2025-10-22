@@ -458,6 +458,14 @@ class DatabaseManager:
     def parse_date(self, date_str):
         """Преобразует дату в формат MySQL DATE"""
         try:
+            # Проверяем, что date_str не None и не пустой
+            if not date_str or date_str is None:
+                return "2025-01-01"
+
+            # Если это уже дата в правильном формате
+            if isinstance(date_str, str) and re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+                return date_str
+
             months = {
                 'янв.': '01', 'фев.': '02', 'мар.': '03', 'апр.': '04',
                 'мая': '05', 'июн.': '06', 'июл.': '07', 'авг.': '08',
@@ -473,7 +481,8 @@ class DatabaseManager:
                 return f"{year}-{month}-{day.zfill(2)}"
 
             return "2025-01-01"
-        except:
+        except Exception as e:
+            logger.error(f"Ошибка парсинга даты '{date_str}': {e}")
             return "2025-01-01"
 
     def get_all_donations(self, guild_name: str):
