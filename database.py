@@ -90,7 +90,7 @@ class DatabaseManager:
 
         try:
             cursor = connection.cursor()
-            sql = "INSERT INTO guilds (name, url) VALUES (%s, %s) ON DUPLICATE KEY UPDATE url = VALUES(url), is_active = TRUE"
+            sql = "INSERT INTO guilds (name, url) VALUES (%s, %s) ON DUPLICATE KEY UPDATE url = VALUES(url)"
             cursor.execute(sql, (guild_name, url))
             connection.commit()
             logger.info(f"✅ Гильдия '{guild_name}' сохранена в БД")
