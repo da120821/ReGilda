@@ -15,7 +15,7 @@ class DatabaseManager:
     def __init__(self):
         self.config = {
             'host': os.getenv('DB_HOST', 'localhost'),
-            'database': os.getenv('DB_NAME', 'TgBot'),
+            'database': os.getenv('DB_NAME', 'railway'),
             'user': os.getenv('DB_USER', 'root'),
             'password': os.getenv('DB_PASSWORD', ''),
             'charset': 'utf8mb4',
@@ -68,8 +68,7 @@ class DatabaseManager:
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL UNIQUE,
                 url VARCHAR(500) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
             cursor.execute(create_table_sql)
@@ -181,14 +180,14 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("SHOW DATABASES LIKE 'TgBot'")
+            cursor.execute("SHOW DATABASES LIKE 'railway'")
             result = cursor.fetchone()
             exists = result is not None
 
             if exists:
-                logger.info("✅ База данных TgBot существует")
+                logger.info("✅ База данных railway существует")
             else:
-                logger.info("❌ База данных TgBot не существует")
+                logger.info("❌ База данных railway не существует")
 
             connection.close()
             return exists
@@ -206,9 +205,9 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("CREATE DATABASE IF NOT EXISTS TgBot")
+            cursor.execute("CREATE DATABASE IF NOT EXISTS railway")
             connection.commit()
-            logger.info("✅ База данных TgBot создана")
+            logger.info("✅ База данных railway создана")
 
             connection.close()
             return True
