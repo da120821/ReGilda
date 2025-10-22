@@ -9,10 +9,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# УДАЛЕНА старая система блокировки - остался только антифлуд
-from collections import defaultdict
-import time
-
 # Система отслеживания времени последних сообщений (антифлуд)
 user_last_message_time = defaultdict(float)
 
@@ -81,7 +77,6 @@ async def show_guilds_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     guilds_text += f"\nВсего гильдий: {len(GUILD_URLS)}"
     await update.message.reply_text(guilds_text)
 
-# ИСПРАВЛЕНО: убрана проверка check_user_availability
 async def handle_add_guild(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки добавления гильдии"""
     await update.message.reply_text(
@@ -96,7 +91,6 @@ async def handle_add_guild(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     context.user_data['awaiting_guild_data'] = True
 
-# ИСПРАВЛЕНО: убрана проверка check_user_availability
 async def handle_guild_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик ввода данных гильдии"""
     if context.user_data.get('awaiting_guild_data'):
@@ -133,7 +127,6 @@ async def handle_guild_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         await handle_other_messages(update, context)
 
-# ИСПРАВЛЕНО: добавлена проверка на флуд и убраны блокировки
 async def handle_guild_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик ТОЛЬКО для кнопок гильдий"""
     text = update.message.text
@@ -158,7 +151,6 @@ async def handle_guild_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         await update.message.reply_text(f"❌ Произошла ошибка: {e}")
 
-# ИСПРАВЛЕНО: убрана проверка check_callback_availability
 async def handle_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Запускает парсинг по требованию"""
     query = update.callback_query
@@ -180,7 +172,6 @@ async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "close_table":
         await query.message.delete()
 
-# ИСПРАВЛЕНО: убрана проверка check_user_availability
 async def handle_other_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик для всех остальных сообщений"""
     await update.message.reply_text(
@@ -199,7 +190,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# ИСПРАВЛЕНО: убрана проверка check_user_availability
 async def handle_delete_guild(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки удаления гильдии"""
     if not GUILD_URLS:
@@ -217,7 +207,6 @@ async def handle_delete_guild(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=reply_markup
     )
 
-# ИСПРАВЛЕНО: убраны блокировки set_user_processing
 async def handle_delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback'ов для удаления гильдий"""
     query = update.callback_query
@@ -264,7 +253,6 @@ async def handle_delete_callback(update: Update, context: ContextTypes.DEFAULT_T
                 f"Попробуйте еще раз или проверьте логи."
             )
 
-# ИСПРАВЛЕНО: убрана проверка check_user_availability
 async def list_guilds(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает список гильдий"""
     await show_guilds_list(update, context)
@@ -283,7 +271,6 @@ if __name__ == '__main__':
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("guilds", list_guilds))
-    # ИСПРАВЛЕНО: используем handle_guild_buttons вместо universal_message_handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guild_buttons))
     application.add_handler(CallbackQueryHandler(handle_show_all, pattern="^show_all_"))
     application.add_handler(CallbackQueryHandler(handle_pagination, pattern="^close_table$"))

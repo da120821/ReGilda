@@ -4,8 +4,8 @@ import os
 import logging
 import re
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
+        # Получаем настройки из переменных окружения Railway
         self.config = {
             'host': os.getenv('MYSQLHOST', os.getenv('DB_HOST', 'localhost')),
             'database': os.getenv('MYSQLDATABASE', os.getenv('DB_NAME', 'TgBot')),
@@ -21,6 +22,10 @@ class DatabaseManager:
             'charset': 'utf8mb4',
             'port': int(os.getenv('MYSQLPORT', os.getenv('DB_PORT', 3306)))
         }
+
+        # Логируем настройки подключения (без пароля)
+        logger.info(
+            f"🔧 Настройки БД: host={self.config['host']}, db={self.config['database']}, port={self.config['port']}")
 
     def connect(self):
         """Подключается к базе данных"""
@@ -106,7 +111,7 @@ class DatabaseManager:
                 connection.close()
 
     def load_all_guilds(self):
-        """Загружает все активные гильдии из БД"""
+        """Загружает все гильдии из БД"""
         connection = self.connect()
         if not connection:
             return {}
@@ -180,14 +185,14 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("SHOW DATABASES LIKE 'railway'")
+            cursor.execute("SHOW DATABASES LIKE 'TgBot'")
             result = cursor.fetchone()
             exists = result is not None
 
             if exists:
-                logger.info("✅ База данных railway существует")
+                logger.info("✅ База данных TgBot существует")
             else:
-                logger.info("❌ База данных railway не существует")
+                logger.info("❌ База данных TgBot не существует")
 
             connection.close()
             return exists
@@ -205,9 +210,9 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("CREATE DATABASE IF NOT EXISTS railway")
+            cursor.execute("CREATE DATABASE IF NOT EXISTS TgBot")
             connection.commit()
-            logger.info("✅ База данных railway создана")
+            logger.info("✅ База данных TgBot создана")
 
             connection.close()
             return True
@@ -601,34 +606,6 @@ class DatabaseManager:
             if connection.is_connected():
                 connection.close()
 
-    def delete_guild(self, guild_name: str):
-        """Удаляет гильдию из БД и её таблицу донатов"""
-        connection = self.connect()
-        if not connection:
-            return False
-
-        try:
-            cursor = connection.cursor()
-
-            # 1. Удаляем запись из таблицы guilds
-            delete_sql = "DELETE FROM guilds WHERE name = %s"
-            cursor.execute(delete_sql, (guild_name,))
-
-            # 2. Удаляем таблицу донатов этой гильдии
-            table_name = self.get_safe_table_name(guild_name)
-            drop_table_sql = f"DROP TABLE IF EXISTS `{table_name}`"
-            cursor.execute(drop_table_sql)
-
-            connection.commit()
-            logger.info(f"✅ Гильдия '{guild_name}' и её таблица удалены из БД")
-            return True
-
-        except Error as e:
-            logger.error(f"❌ Ошибка удаления гильдии '{guild_name}': {e}")
-            return False
-        finally:
-            if connection.is_connected():
-                connection.close()
 
 # Создаем экземпляр менеджера базы данных
 db_manager = DatabaseManager()
