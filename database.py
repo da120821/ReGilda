@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     def __init__(self):
         self.config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'database': os.getenv('DB_NAME', 'railway'),
-            'user': os.getenv('DB_USER', 'root'),
-            'password': os.getenv('DB_PASSWORD', ''),
+            'host': os.getenv('MYSQLHOST', os.getenv('DB_HOST', 'localhost')),
+            'database': os.getenv('MYSQLDATABASE', os.getenv('DB_NAME', 'TgBot')),
+            'user': os.getenv('MYSQLUSER', os.getenv('DB_USER', 'root')),
+            'password': os.getenv('MYSQLPASSWORD', os.getenv('DB_PASSWORD', '')),
             'charset': 'utf8mb4',
-            'port': int(os.getenv('DB_PORT', 3306))
+            'port': int(os.getenv('MYSQLPORT', os.getenv('DB_PORT', 3306)))
         }
 
     def connect(self):
