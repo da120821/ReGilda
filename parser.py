@@ -32,8 +32,7 @@ def setup_driver():
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT',
-                                              'https://standalone-chrome-browserless.up.railway.app/wd/hub')
+        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT','https://standalone-chrome-browserless.up.railway.app/wd/hub')
         driver = webdriver.Remote(
             command_executor=browserless_endpoint,
             options=chrome_options
@@ -225,26 +224,42 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         print(f"Открываем страницу гильдии '{guild_name}'...")
         driver.get(url)
 
+
         # Загружаем куки
         print("Загружаем куки...")
         try:
             cookies = None
-
-            # Сначала пробуем из переменной окружения
             cookies_json = os.getenv('COOKIES_JSON')
             if cookies_json:
                 cookies = json.loads(cookies_json)
                 print("✅ Куки загружены из переменных окружения")
             else:
-                # Иначе из файла
                 with open(cookies_file, 'r') as file:
                     cookies = json.load(file)
                 print("✅ Куки загружены из файла")
 
-            # Добавляем куки в браузер
+            # Добавляем куки в браузер ДО перехода на страницу
             if cookies:
+                # Сначала переходим на домен, чтобы установить куки
+                driver.get("https://remanga.org")
+                time.sleep(2)
+
                 for cookie in cookies:
-                    driver.add_cookie(cookie)
+                    try:
+                        # Убираем лишние поля которые могут мешать
+                        cookie_copy = cookie.copy()
+                        if 'sameSite' in cookie_copy:
+                            cookie_copy['sameSite'] = 'Lax'
+                        driver.add_cookie(cookie_copy)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
+
+                print(f"✅ Добавлено {len(cookies)} куков")
+
+                # Проверяем куки
+                current_cookies = driver.get_cookies()
+                print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
+
             else:
                 print("❌ Куки не загружены!")
 
