@@ -16,7 +16,7 @@ class DatabaseManager:
         # Получаем настройки из переменных окружения Railway
         self.config = {
             'host': os.getenv('MYSQLHOST', os.getenv('DB_HOST', 'localhost')),
-            'database': os.getenv('MYSQLDATABASE', os.getenv('DB_NAME', 'TgBot')),
+            'database': os.getenv('MYSQLDATABASE', os.getenv('DB_NAME', 'railway')),
             'user': os.getenv('MYSQLUSER', os.getenv('DB_USER', 'root')),
             'password': os.getenv('MYSQLPASSWORD', os.getenv('DB_PASSWORD', '')),
             'charset': 'utf8mb4',
@@ -185,14 +185,14 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("SHOW DATABASES LIKE 'TgBot'")
+            cursor.execute("SHOW DATABASES LIKE 'railway'")
             result = cursor.fetchone()
             exists = result is not None
 
             if exists:
-                logger.info("✅ База данных TgBot существует")
+                logger.info("✅ База данных railway существует")
             else:
-                logger.info("❌ База данных TgBot не существует")
+                logger.info("❌ База данных railway не существует")
 
             connection.close()
             return exists
@@ -210,9 +210,9 @@ class DatabaseManager:
             connection = mysql.connector.connect(**temp_config)
             cursor = connection.cursor()
 
-            cursor.execute("CREATE DATABASE IF NOT EXISTS TgBot")
+            cursor.execute("CREATE DATABASE IF NOT EXISTS railway")
             connection.commit()
-            logger.info("✅ База данных TgBot создана")
+            logger.info("✅ База данных railway создана")
 
             connection.close()
             return True

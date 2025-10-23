@@ -9,7 +9,10 @@ import json
 import pandas as pd
 import re
 import os
-import subprocess
+from dotenv import load_dotenv
+
+# Загружаем переменные из .env файла
+load_dotenv()
 
 cookies_file = 'cookies.json'
 
@@ -26,33 +29,86 @@ def setup_driver():
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-extensions")
 
-    # Для обхода блокировок
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    # Добавляем дополнительные опции для стабильности
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT','https://standalone-chrome-browserless.up.railway.app/wd/hub')
+        # Получаем endpoint и токен
+        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT',
+                                              'https://browserless.browserless.svc.cluster.local:3000/webdriver')
+        browser_token = os.environ.get('BROWSER_TOKEN', '')
+
+        # Если используется Railway, используем их endpoint
+        if 'railway' in browserless_endpoint:
+            browserless_endpoint = 'https://browserless.browserless.svc.cluster.local:3000/webdriver'
+
+        # Добавляем токен к endpoint
+        if browser_token:
+            if '?' in browserless_endpoint:
+                browserless_endpoint += f'&token={browser_token}'
+            else:
+                browserless_endpoint += f'?token={browser_token}'
+
+        print(
+            f"🔗 Подключаемся к Browserless: {browserless_endpoint.replace(browser_token, '***') if browser_token else browserless_endpoint}")
+
         driver = webdriver.Remote(
             command_executor=browserless_endpoint,
             options=chrome_options
         )
-        print(f"✅ Успешно подключились к Browserless: {browserless_endpoint}")
+
+        # Добавляем скрипт для маскировки веб-драйвера
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        print(f"✅ Успешно подключились к Browserless")
         return driver
+
     except Exception as e:
         print(f"❌ Ошибка подключения к Browserless: {e}")
-        return None
+
+        # Пробуем альтернативный endpoint
+        print("🔄 Пробуем альтернативный endpoint...")
+        try:
+            alternative_endpoint = "https://chrome.browserless.io/webdriver"
+            if browser_token:
+                alternative_endpoint += f"?token={browser_token}"
+
+            print(
+                f"🔗 Пробуем: {alternative_endpoint.replace(browser_token, '***') if browser_token else alternative_endpoint}")
+
+            driver = webdriver.Remote(
+                command_executor=alternative_endpoint,
+                options=chrome_options
+            )
+            print(f"✅ Успешно подключились через альтернативный endpoint")
+            return driver
+        except Exception as e2:
+            print(f"❌ Ошибка альтернативного подключения: {e2}")
+            return None
 
 
-def check_chrome_installation():
-    """Проверяет установлен ли Chrome/Chromium"""
+def check_browserless_connection():
+    """Проверяет подключение к Browserless"""
     print("🔍 Проверяем подключение к Browserless...")
+
+    # Проверяем наличие токена
+    browser_token = os.environ.get('BROWSER_TOKEN', '')
+    if not browser_token:
+        print("❌ BROWSER_TOKEN не установлен в переменных окружения")
+        return False
+
+    print(f"✅ BROWSER_TOKEN: {'*' * len(browser_token)}")
 
     try:
         driver = setup_driver()
         if driver:
+            # Проверяем, что браузер работает
+            driver.get("https://www.google.com")
+            title = driver.title
             driver.quit()
-            print("✅ Browserless доступен")
+            print(f"✅ Browserless доступен, заголовок: {title}")
             return True
         else:
             print("❌ Browserless недоступен")
@@ -62,16 +118,13 @@ def check_chrome_installation():
         return False
 
 
-cookies_file = 'cookies.json'
-
-
 def parse_table_for_service(url):
     return parse_table(url)
 
 
 def normalize_username(username):
     """Убираем префикс U из имен пользователей"""
-    if username.startswith('U') and len(username) > 1:
+    if username and username.startswith('U') and len(username) > 1:
         if username[1].isupper():
             return username[1:]
     return username
@@ -177,7 +230,6 @@ def extract_guild_name_from_url(url):
                 guild_slug_clean = guild_slug
 
             # Преобразуем slug в читаемое название
-            # "i-g-g-d-r-a-s-i-l" → "Iggdrasil"
             guild_name = guild_slug_clean.replace('-', ' ')
 
             # Убираем лишние пробелы и делаем правильный title case
@@ -199,108 +251,169 @@ def extract_guild_name_from_url(url):
         return "Неизвестная гильдия"
 
 
+def load_cookies(driver):
+    """Загружает куки в браузер"""
+    try:
+        cookies = None
+        cookies_json = os.getenv('COOKIES_JSON')
+
+        if cookies_json:
+            cookies = json.loads(cookies_json)
+            print("✅ Куки загружены из переменных окружения")
+        elif os.path.exists(cookies_file):
+            with open(cookies_file, 'r', encoding='utf-8') as file:
+                cookies = json.load(file)
+            print("✅ Куки загружены из файла")
+        else:
+            print("❌ Куки не найдены ни в переменных окружения, ни в файле")
+            return False
+
+        # Сначала переходим на домен, чтобы установить куки
+        print("Переходим на домен для установки кук...")
+        driver.get("https://remanga.org")
+        time.sleep(3)
+
+        # Удаляем существующие куки и добавляем новые
+        driver.delete_all_cookies()
+
+        cookies_added = 0
+        for cookie in cookies:
+            try:
+                # Убираем лишние поля которые могут мешать
+                cookie_copy = {k: v for k, v in cookie.items()
+                               if k in ['name', 'value', 'domain', 'path', 'expiry', 'secure', 'httpOnly']}
+
+                # Убеждаемся, что домен правильный
+                if 'domain' in cookie_copy:
+                    if cookie_copy['domain'].startswith('.'):
+                        cookie_copy['domain'] = cookie_copy['domain'][1:]
+                    # Убеждаемся, что домен соответствует remanga.org
+                    if 'remanga.org' not in cookie_copy['domain']:
+                        continue
+
+                driver.add_cookie(cookie_copy)
+                cookies_added += 1
+            except Exception as e:
+                print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
+
+        print(f"✅ Добавлено {cookies_added} куков")
+
+        # Проверяем куки
+        current_cookies = driver.get_cookies()
+        print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Ошибка загрузки куки: {e}")
+        return False
+
+
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
     Парсит виртуализированную таблицу бустов через Browserless
     """
+    # Сначала проверяем подключение
+    if not check_browserless_connection():
+        print("❌ Browserless недоступен, пропускаем парсинг")
+        return pd.DataFrame()
+
     # Настройка браузера через Browserless
     driver = setup_driver()
     if not driver:
         print("❌ Не удалось подключиться к Browserless")
         return pd.DataFrame()
 
-    wait = WebDriverWait(driver, 120)
+    wait = WebDriverWait(driver, 30)
     rows_data = []
     seen_records = set()
     previous_count = 0
     no_new_count = 0
-    max_scroll_attempts = 50
+    max_scroll_attempts = 20
 
     try:
-        # ВОССТАНАВЛИВАЕМ получение названия гильдии (только для отображения)
+        # Получаем название гильдии
         guild_name = extract_guild_name_from_url(url)
 
-        # Открываем сайт
+        # Загружаем куки ДО перехода на целевую страницу
+        print("Загружаем куки...")
+        cookies_loaded = load_cookies(driver)
+
+        if not cookies_loaded:
+            print("❌ Не удалось загрузить куки, продолжаем без них...")
+
+        # Открываем целевую страницу
         print(f"Открываем страницу гильдии '{guild_name}'...")
         driver.get(url)
+        time.sleep(5)
 
+        # Проверяем, загрузилась ли страница
+        current_url = driver.current_url
+        if "remanga.org" not in current_url:
+            print(f"❌ Не удалось загрузить целевую страницу. Текущий URL: {current_url}")
+            return pd.DataFrame()
 
-        # Загружаем куки
-        print("Загружаем куки...")
-        try:
-            cookies = None
-            cookies_json = os.getenv('COOKIES_JSON')
-            if cookies_json:
-                cookies = json.loads(cookies_json)
-                print("✅ Куки загружены из переменных окружения")
-            else:
-                with open(cookies_file, 'r') as file:
-                    cookies = json.load(file)
-                print("✅ Куки загружены из файла")
-
-            # Добавляем куки в браузер ДО перехода на страницу
-            if cookies:
-                # Сначала переходим на домен, чтобы установить куки
-                driver.get("https://remanga.org")
-                time.sleep(2)
-
-                for cookie in cookies:
-                    try:
-                        # Убираем лишние поля которые могут мешать
-                        cookie_copy = cookie.copy()
-                        if 'sameSite' in cookie_copy:
-                            cookie_copy['sameSite'] = 'Lax'
-                        driver.add_cookie(cookie_copy)
-                    except Exception as e:
-                        print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
-
-                print(f"✅ Добавлено {len(cookies)} куков")
-
-                # Проверяем куки
-                current_cookies = driver.get_cookies()
-                print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
-
-            else:
-                print("❌ Куки не загружены!")
-
-        except Exception as e:
-            print(f"Ошибка загрузки куки: {e}")
-
-        # Перезагружаем страницу
-        print("Перезагружаем страницу...")
-        driver.refresh()
-        time.sleep(10)
+        # Проверяем, не перенаправило ли на страницу входа
+        if "login" in current_url or "signin" in current_url:
+            print("❌ Перенаправлено на страницу входа. Куки устарели.")
+            return pd.DataFrame()
 
         # Ждем загрузки виртуализированной таблицы
         print("Ожидаем загрузки таблицы...")
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-sentry-component='VirtualizedDataTable']")))
+        try:
+            wait.until(EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "div[data-sentry-component*='Donations'], div[class*='table'], table")))
+            print("✅ Таблица найдена")
+        except Exception as e:
+            print(f"⚠️ Таблица не загрузилась: {e}")
+            # Продолжаем в надежде, что данные все равно есть
+
+        print("⏳ Ждем загрузку данных... (5 секунд)")
+        time.sleep(5)
 
         print("Начинаем сбор данных с прокруткой...")
 
-        # ⚡ ДОБАВЛЯЕМ ОСНОВНОЙ БЛОК ПАРСИНГА!
         for attempt in range(max_scroll_attempts):
             # Получаем HTML
             page_html = driver.page_source
             soup = BeautifulSoup(page_html, 'html.parser')
 
-            # Находим контейнер таблицы
-            table_container = soup.find('div', {'data-sentry-component': 'VirtualizedDataTable'})
+            # Ищем таблицу разными способами
+            table_selectors = [
+                'div[data-sentry-component="VirtualizedDataTable"]',
+                'div[data-sentry-component="GuildDonationsList"]',
+                'div[class*="table"]',
+                'table'
+            ]
+
+            table_container = None
+            for selector in table_selectors:
+                table_container = soup.select_one(selector)
+                if table_container:
+                    print(f"✅ Найдена таблица с селектором: {selector}")
+                    break
+
             if not table_container:
-                print("Таблица не найдена")
+                print("❌ Таблица не найдена в HTML")
+                # Сохраняем HTML для отладки
+                with open('debug_page.html', 'w', encoding='utf-8') as f:
+                    f.write(page_html)
+                print("✅ Сохранен HTML для отладки: debug_page.html")
                 break
 
-            # Находим тело таблицы
-            tbody = table_container.find('tbody', {'data-sentry-component': 'TableBody'})
-            if not tbody:
-                print("Тело таблицы не найдено")
-                break
+            # Ищем строки таблицы
+            rows = table_container.find_all('tr', style=re.compile(r'position:\s*absolute'))
 
-            # Ищем все строки с абсолютным позиционированием
-            rows = tbody.find_all('tr', style=re.compile(r'position:\s*absolute'))
+            # Альтернативный поиск строк
+            if not rows:
+                rows = table_container.find_all('tr')
+                # Фильтруем только видимые строки с данными
+                rows = [row for row in rows if row.find('td')]
 
             print(f"Попытка {attempt + 1}: найдено {len(rows)} строк")
 
             # Обрабатываем строки
+            new_rows_found = 0
             for row in rows:
                 try:
                     # Получаем все ячейки
@@ -325,17 +438,18 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
                     if row_id not in seen_records:
                         rows_data.append([user, amount, date])
                         seen_records.add(row_id)
+                        new_rows_found += 1
 
                 except Exception as e:
                     print(f"Ошибка обработки строки: {e}")
                     continue
 
-            print(f"Собрано записей: {len(rows_data)}")
+            print(f"Собрано записей: {len(rows_data)} (новых: {new_rows_found})")
 
             # Проверяем прогресс
             if len(rows_data) == previous_count:
                 no_new_count += 1
-                if no_new_count >= 5:
+                if no_new_count >= 3:
                     print("Новых данных нет, завершаем...")
                     break
             else:
@@ -344,20 +458,32 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
             # Прокрутка вниз
             try:
-                # Прокручиваем контейнер таблицы
-                container = driver.find_element(By.CSS_SELECTOR, "[data-sentry-component='VirtualizedDataTable']")
-                driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", container)
-                time.sleep(2)
+                # Пробуем разные элементы для прокрутки
+                scroll_selectors = [
+                    "div[data-sentry-component='GuildDonationsList']",
+                    "div[data-sentry-component='VirtualizedDataTable']",
+                    ".table-container",
+                    "div[class*='virtual']",
+                    "body"
+                ]
 
-                # Дополнительная прокрутка страницы
-                driver.execute_script("window.scrollBy(0, 500);")
-                time.sleep(1)
+                for selector in scroll_selectors:
+                    try:
+                        element = driver.find_element(By.CSS_SELECTOR, selector)
+                        driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", element)
+                        print(f"✅ Прокручен элемент: {selector}")
+                        break
+                    except:
+                        continue
+                else:
+                    # Если не нашли специфичный элемент, прокручиваем страницу
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    print("✅ Прокручена вся страница")
+
+                time.sleep(2)
 
             except Exception as e:
                 print(f"Ошибка прокрутки: {e}")
-                # Пробуем альтернативную прокрутку
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(2)
 
         print(f"\n=== ЗАВЕРШЕНО ===")
         print(f"Всего собрано записей: {len(rows_data)}")
@@ -366,7 +492,6 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         if rows_data:
             df = pd.DataFrame(rows_data, columns=['Пользователь', 'Сумма', 'Дата'])
             df = df.drop_duplicates()
-            print(f"Итоговое количество уникальных записей бустов: {len(df)}")
 
             print("🔄 Преобразуем суммы в числовой формат...")
             df['Сумма'] = df['Сумма'].apply(convert_amount_to_int)
@@ -376,16 +501,39 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
             print(f"  - Уникальных бустеров: {df['Пользователь'].nunique()}")
             print(f"  - Общая сумма бустов: {df['Сумма'].sum():,} ⚡")
 
+            # Сохраняем результат в CSV для отладки
+            df.to_csv('donations_result.csv', index=False, encoding='utf-8')
+            print("✅ Результат сохранен в donations_result.csv")
+
             return df
         else:
             print("❌ Не удалось собрать данные бустов")
             return pd.DataFrame()
 
     except Exception as e:
-        print(f"Произошла ошибка: {e}")
+        print(f"❌ Произошла ошибка: {e}")
         import traceback
         traceback.print_exc()
         return pd.DataFrame()
     finally:
         print("Закрываем браузер...")
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
+
+
+# Добавляем точку входа для тестирования
+if __name__ == "__main__":
+    print("🔧 Тестируем парсер...")
+
+    # Сначала проверяем подключение
+    if check_browserless_connection():
+        result = parse_table()
+        if not result.empty:
+            print("✅ Парсер работает успешно!")
+            print(result.head())
+        else:
+            print("❌ Парсер не смог собрать данные")
+    else:
+        print("❌ Не удалось подключиться к Browserless")
