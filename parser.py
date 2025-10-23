@@ -1,6 +1,4 @@
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -16,87 +14,53 @@ import subprocess
 cookies_file = 'cookies.json'
 
 
-def check_chrome_installation():
-    """Проверяет установлен ли Chrome/Chromium"""
-    print("🔍 Проверяем установку браузера...")
-
-    # Проверяем Chromium
-    try:
-        result = subprocess.run(['which', 'chromium'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ Chromium найден: {result.stdout.strip()}")
-            return True
-    except:
-        pass
-
-    # Проверяем Chrome
-    try:
-        result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ Chrome найден: {result.stdout.strip()}")
-            return True
-    except:
-        pass
-
-    # Проверяем chromedriver
-    try:
-        result = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ Chromedriver найден: {result.stdout.strip()}")
-            return True
-    except:
-        pass
-
-    print("❌ Браузер не найден")
-    return False
-
 def setup_driver():
-    """Настраивает Chrome/Chromium driver для Railway"""
-    options = Options()
+    """Настраивает драйвер для Browserless на Railway"""
+    chrome_options = Options()
 
-    # Опции для серверной среды
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-images')
+    # Аргументы для Railway
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-extensions")
 
     # Для обхода блокировок
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        # Способ 1: Используем системный Chromium
-        options.binary_location = '/usr/bin/chromium'
-        service = Service(executable_path='/usr/bin/chromedriver')
-        driver = webdriver.Chrome(service=service, options=options)
-        print("✅ Chromium driver успешно запущен")
+        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT',
+                                              'https://standalone-chrome-browserless.up.railway.app/wd/hub')
+        driver = webdriver.Remote(
+            command_executor=browserless_endpoint,
+            options=chrome_options
+        )
+        print(f"✅ Успешно подключились к Browserless: {browserless_endpoint}")
         return driver
-
     except Exception as e:
-        print(f"❌ Ошибка Chromium: {e}")
+        print(f"❌ Ошибка подключения к Browserless: {e}")
+        return None
 
-        try:
-            # Способ 2: Пробуем Chrome без указания пути
-            driver = webdriver.Chrome(options=options)
-            print("✅ Chrome driver успешно запущен")
-            return driver
-        except Exception as e2:
-            print(f"❌ Ошибка Chrome: {e2}")
 
-            try:
-                # Способ 3: Используем webdriver-manager как запасной вариант
-                from webdriver_manager.chrome import ChromeDriverManager
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=options)
-                print("✅ Chrome через webdriver-manager запущен")
-                return driver
-            except Exception as e3:
-                print(f"❌ Все способы не удались: {e3}")
-                return None
+def check_chrome_installation():
+    """Проверяет установлен ли Chrome/Chromium"""
+    print("🔍 Проверяем подключение к Browserless...")
+
+    try:
+        driver = setup_driver()
+        if driver:
+            driver.quit()
+            print("✅ Browserless доступен")
+            return True
+        else:
+            print("❌ Browserless недоступен")
+            return False
+    except Exception as e:
+        print(f"❌ Ошибка проверки Browserless: {e}")
+        return False
 
 
 cookies_file = 'cookies.json'
@@ -235,57 +199,18 @@ def extract_guild_name_from_url(url):
         print(f"❌ Ошибка извлечения названия гильдии: {e}")
         return "Неизвестная гильдия"
 
+
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
-    Парсит виртуализированную таблицу бустов
+    Парсит виртуализированную таблицу бустов через Browserless
     """
-    """Настраивает Chrome/Chromium driver для Railway"""
-    options = Options()
+    # Настройка браузера через Browserless
+    driver = setup_driver()
+    if not driver:
+        print("❌ Не удалось подключиться к Browserless")
+        return pd.DataFrame()
 
-    # Опции для серверной среды
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-images')
-
-    # Для обхода блокировок
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-
-    try:
-        # Способ 1: Используем системный Chromium
-        options.binary_location = '/usr/bin/chromium'
-        service = Service(executable_path='/usr/bin/chromedriver')
-        driver = webdriver.Chrome(service=service, options=options)
-        print("✅ Chromium driver успешно запущен")
-        return driver
-
-    except Exception as e:
-        print(f"❌ Ошибка Chromium: {e}")
-
-        try:
-            # Способ 2: Пробуем Chrome без указания пути
-            driver = webdriver.Chrome(options=options)
-            print("✅ Chrome driver успешно запущен")
-            return driver
-        except Exception as e2:
-            print(f"❌ Ошибка Chrome: {e2}")
-
-            try:
-                # Способ 3: Используем webdriver-manager как запасной вариант
-                from webdriver_manager.chrome import ChromeDriverManager
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=options)
-                print("✅ Chrome через webdriver-manager запущен")
-                return driver
-            except Exception as e3:
-                print(f"❌ Все способы не удались: {e3}")
-                return None
-
+    wait = WebDriverWait(driver, 120)
     rows_data = []
     seen_records = set()
     previous_count = 0
@@ -431,14 +356,10 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
             print("🔄 Преобразуем суммы в числовой формат...")
             df['Сумма'] = df['Сумма'].apply(convert_amount_to_int)
 
-
-
             print("📊 Статистика собранных бустов:")
             print(f"  - Всего собрано бустов: {len(df)}")
             print(f"  - Уникальных бустеров: {df['Пользователь'].nunique()}")
             print(f"  - Общая сумма бустов: {df['Сумма'].sum():,} ⚡")
-
-
 
             return df
         else:
