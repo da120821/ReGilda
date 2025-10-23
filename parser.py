@@ -18,11 +18,11 @@ cookies_file = 'cookies.json'
 
 
 def setup_driver():
-    """Настраивает драйвер для Browserless на Railway"""
+    """Настраивает драйвер для Browserless"""
     chrome_options = Options()
 
-    # Аргументы для Railway
-    chrome_options.add_argument("--headless")
+    # Аргументы для Chrome
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
@@ -36,23 +36,24 @@ def setup_driver():
 
     try:
         # Получаем endpoint и токен
-        browserless_endpoint = os.environ.get('BROWSERLESS_ENDPOINT',
-                                              'https://browserless.browserless.svc.cluster.local:3000/webdriver')
         browser_token = os.environ.get('BROWSER_TOKEN', '')
 
-        # Если используется Railway, используем их endpoint
-        if 'railway' in browserless_endpoint:
-            browserless_endpoint = 'https://browserless.browserless.svc.cluster.local:3000/webdriver'
+        # Определяем endpoint в зависимости от окружения
+        if os.path.exists('/.dockerenv'):  # Мы в Docker контейнере
+            # Внутри Docker сети используем service name
+            browserless_endpoint = "http://browserless:3000/webdriver"
+        else:
+            # Локально или на сервере без Docker
+            browserless_endpoint = "http://localhost:3000/webdriver"
 
-        # Добавляем токен к endpoint
+        # Добавляем токен к endpoint если он есть
         if browser_token:
             if '?' in browserless_endpoint:
                 browserless_endpoint += f'&token={browser_token}'
             else:
                 browserless_endpoint += f'?token={browser_token}'
 
-        print(
-            f"🔗 Подключаемся к Browserless: {browserless_endpoint.replace(browser_token, '***') if browser_token else browserless_endpoint}")
+        print(f"🔗 Подключаемся к Browserless: {browserless_endpoint}")
 
         driver = webdriver.Remote(
             command_executor=browserless_endpoint,
@@ -67,39 +68,12 @@ def setup_driver():
 
     except Exception as e:
         print(f"❌ Ошибка подключения к Browserless: {e}")
-
-        # Пробуем альтернативный endpoint
-        print("🔄 Пробуем альтернативный endpoint...")
-        try:
-            alternative_endpoint = "https://chrome.browserless.io/webdriver"
-            if browser_token:
-                alternative_endpoint += f"?token={browser_token}"
-
-            print(
-                f"🔗 Пробуем: {alternative_endpoint.replace(browser_token, '***') if browser_token else alternative_endpoint}")
-
-            driver = webdriver.Remote(
-                command_executor=alternative_endpoint,
-                options=chrome_options
-            )
-            print(f"✅ Успешно подключились через альтернативный endpoint")
-            return driver
-        except Exception as e2:
-            print(f"❌ Ошибка альтернативного подключения: {e2}")
-            return None
+        return None
 
 
 def check_browserless_connection():
     """Проверяет подключение к Browserless"""
     print("🔍 Проверяем подключение к Browserless...")
-
-    # Проверяем наличие токена
-    browser_token = os.environ.get('BROWSER_TOKEN', '')
-    if not browser_token:
-        print("❌ BROWSER_TOKEN не установлен в переменных окружения")
-        return False
-
-    print(f"✅ BROWSER_TOKEN: {'*' * len(browser_token)}")
 
     try:
         driver = setup_driver()
