@@ -12,7 +12,105 @@ import pandas as pd
 import re
 import os
 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import time
+import json
+import pandas as pd
+import re
+import os
+import subprocess
 
+cookies_file = 'cookies.json'
+
+
+def setup_driver():
+    """Настраивает Chrome/Chromium driver для Railway"""
+    options = Options()
+
+    # Опции для серверной среды
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-images')
+
+    # Для обхода блокировок
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    try:
+        # Способ 1: Используем системный Chromium
+        options.binary_location = '/usr/bin/chromium'
+        service = Service(executable_path='/usr/bin/chromedriver')
+        driver = webdriver.Chrome(service=service, options=options)
+        print("✅ Chromium driver успешно запущен")
+        return driver
+
+    except Exception as e:
+        print(f"❌ Ошибка Chromium: {e}")
+
+        try:
+            # Способ 2: Пробуем Chrome без указания пути
+            driver = webdriver.Chrome(options=options)
+            print("✅ Chrome driver успешно запущен")
+            return driver
+        except Exception as e2:
+            print(f"❌ Ошибка Chrome: {e2}")
+
+            try:
+                # Способ 3: Используем webdriver-manager как запасной вариант
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=options)
+                print("✅ Chrome через webdriver-manager запущен")
+                return driver
+            except Exception as e3:
+                print(f"❌ Все способы не удались: {e3}")
+                return None
+
+
+def check_chrome_installation():
+    """Проверяет установлен ли Chrome/Chromium"""
+    print("🔍 Проверяем установку браузера...")
+
+    # Проверяем Chromium
+    try:
+        result = subprocess.run(['which', 'chromium'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✅ Chromium найден: {result.stdout.strip()}")
+            return True
+    except:
+        pass
+
+    # Проверяем Chrome
+    try:
+        result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✅ Chrome найден: {result.stdout.strip()}")
+            return True
+    except:
+        pass
+
+    # Проверяем chromedriver
+    try:
+        result = subprocess.run(['which', 'chromedriver'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✅ Chromedriver найден: {result.stdout.strip()}")
+            return True
+    except:
+        pass
+
+    print("❌ Браузер не найден")
+    return False
 
 
 cookies_file = 'cookies.json'
