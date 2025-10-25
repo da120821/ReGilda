@@ -41,10 +41,10 @@ def setup_driver():
         # Определяем endpoint в зависимости от окружения
         if os.path.exists('/.dockerenv'):  # Мы в Docker контейнере
             # Внутри Docker сети используем service name
-            browserless_endpoint = "http://browserless:3000/webdriver"
+            browserless_endpoint = "https://browserless-browserless.up.railway.app/webdriver?token=1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j/webdriver"
         else:
             # Локально или на сервере без Docker
-            browserless_endpoint = "http://localhost:3000/webdriver"
+            browserless_endpoint = "https://browserless-browserless.up.railway.app/webdriver?token=1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j/webdriver"
 
         # Добавляем токен к endpoint если он есть
         if browser_token:
