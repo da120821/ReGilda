@@ -18,7 +18,19 @@ cookies_file = 'cookies.json'
 
 
 def setup_driver():
-    """Настраивает драйвер для Browserless"""
+    """Настраивает Selenium драйвер для Browserless"""
+    # Получаем переменные окружения
+    token = os.getenv('BROWSER_TOKEN')
+    webdriver_endpoint = os.getenv('BROWSER_WEBDRIVER_ENDPOINT')
+
+    print("🔧 Конфигурация Selenium:")
+    print(f"   Token: {token[:10]}..." if token else "❌ Token: НЕ НАЙДЕН")
+    print(f"   WebDriver: {webdriver_endpoint}" if webdriver_endpoint else "❌ WebDriver: НЕ НАЙДЕН")
+
+    if not token or not webdriver_endpoint:
+        print("❌ Отсутствуют обязательные переменные для Selenium")
+        return None
+
     chrome_options = Options()
 
     # Аргументы для Chrome
@@ -30,8 +42,6 @@ def setup_driver():
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--ignore-ssl-errors")
-    chrome_options.add_argument("--allow-insecure-localhost")
-    chrome_options.add_argument("--allow-running-insecure-content")
 
     # Добавляем дополнительные опции для стабильности
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
@@ -39,22 +49,13 @@ def setup_driver():
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        # Используем переменные окружения Railway
-        browser_token = os.environ.get('BROWSER_TOKEN', '1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j')
-
-        # Используем публичный endpoint из переменных окружения
-        browserless_endpoint = os.environ.get(
-            'BROWSER_WEBDRIVER_ENDPOINT',
-            'https://browserless-browserless.up.railway.app/webdriver'
-        )
-
-        # Формируем URL с токеном
-        if '?' in browserless_endpoint:
-            webdriver_url = f"{browserless_endpoint}&token={browser_token}"
+        # Формируем URL с токеном для Selenium
+        if '?' in webdriver_endpoint:
+            webdriver_url = f"{webdriver_endpoint}&token={token}"
         else:
-            webdriver_url = f"{browserless_endpoint}?token={browser_token}"
+            webdriver_url = f"{webdriver_endpoint}?token={token}"
 
-        print(f"🔗 Подключаемся к Browserless: {webdriver_url}")
+        print(f"🔗 Подключаемся к Selenium WebDriver: {webdriver_url}")
 
         driver = webdriver.Remote(
             command_executor=webdriver_url,
@@ -68,17 +69,17 @@ def setup_driver():
         # Добавляем скрипт для маскировки веб-драйвера
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-        print(f"✅ Успешно подключились к Browserless")
+        print(f"✅ Успешно подключились к Selenium WebDriver")
         return driver
 
     except Exception as e:
-        print(f"❌ Ошибка подключения к Browserless: {e}")
+        print(f"❌ Ошибка подключения к Selenium: {e}")
         return None
 
 
 def check_browserless_connection():
-    """Проверяет подключение к Browserless"""
-    print("🔍 Проверяем подключение к Browserless...")
+    """Проверяет подключение к Browserless через Selenium"""
+    print("🔍 Проверяем подключение к Selenium WebDriver...")
 
     try:
         driver = setup_driver()
@@ -87,16 +88,17 @@ def check_browserless_connection():
             driver.get("https://www.google.com")
             title = driver.title
             driver.quit()
-            print(f"✅ Browserless доступен, заголовок: {title}")
+            print(f"✅ Selenium доступен, заголовок: {title}")
             return True
         else:
-            print("❌ Browserless недоступен")
+            print("❌ Selenium недоступен")
             return False
     except Exception as e:
-        print(f"❌ Ошибка проверки Browserless: {e}")
+        print(f"❌ Ошибка проверки Selenium: {e}")
         return False
 
 
+# Все остальные функции парсинга остаются БЕЗ ИЗМЕНЕНИЙ
 def parse_table_for_service(url):
     return parse_table(url)
 
@@ -290,17 +292,17 @@ def load_cookies(driver):
 
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
-    Парсит виртуализированную таблицу бустов через Browserless
+    Парсит виртуализированную таблицу бустов через Selenium
     """
     # Сначала проверяем подключение
     if not check_browserless_connection():
-        print("❌ Browserless недоступен, пропускаем парсинг")
+        print("❌ Selenium недоступен, пропускаем парсинг")
         return pd.DataFrame()
 
-    # Настройка браузера через Browserless
+    # Настройка браузера через Selenium
     driver = setup_driver()
     if not driver:
-        print("❌ Не удалось подключиться к Browserless")
+        print("❌ Не удалось подключиться к Selenium")
         return pd.DataFrame()
 
     wait = WebDriverWait(driver, 30)
@@ -504,15 +506,15 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
 # Добавляем точку входа для тестирования
 if __name__ == "__main__":
-    print("🔧 Тестируем парсер...")
+    print("🔧 Тестируем Selenium парсер...")
 
     # Сначала проверяем подключение
     if check_browserless_connection():
         result = parse_table()
         if not result.empty:
-            print("✅ Парсер работает успешно!")
+            print("✅ Selenium парсер работает успешно!")
             print(result.head())
         else:
             print("❌ Парсер не смог собрать данные")
     else:
-        print("❌ Не удалось подключиться к Browserless")
+        print("❌ Не удалось подключиться к Selenium")
