@@ -28,6 +28,10 @@ def setup_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--ignore-ssl-errors")
+    chrome_options.add_argument("--allow-insecure-localhost")
+    chrome_options.add_argument("--allow-running-insecure-content")
 
     # Добавляем дополнительные опции для стабильности
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
@@ -35,30 +39,31 @@ def setup_driver():
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        # Получаем endpoint и токен
-        browser_token = os.environ.get('BROWSER_TOKEN', '')
+        # Используем переменные окружения Railway
+        browser_token = os.environ.get('BROWSER_TOKEN', '1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j')
 
-        # Определяем endpoint в зависимости от окружения
-        if os.path.exists('/.dockerenv'):  # Мы в Docker контейнере
-            # Внутри Docker сети используем service name
-            browserless_endpoint = "https://browserless-browserless.up.railway.app/webdriver?token=1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j/webdriver"
+        # Используем публичный endpoint из переменных окружения
+        browserless_endpoint = os.environ.get(
+            'BROWSER_WEBDRIVER_ENDPOINT',
+            'https://browserless-browserless.up.railway.app/webdriver'
+        )
+
+        # Формируем URL с токеном
+        if '?' in browserless_endpoint:
+            webdriver_url = f"{browserless_endpoint}&token={browser_token}"
         else:
-            # Локально или на сервере без Docker
-            browserless_endpoint = "https://browserless-browserless.up.railway.app/webdriver?token=1gk2gW97XgdGHg9kZeEsefMW0GrfP49md66r48BWwFADYm3j/webdriver"
+            webdriver_url = f"{browserless_endpoint}?token={browser_token}"
 
-        # Добавляем токен к endpoint если он есть
-        if browser_token:
-            if '?' in browserless_endpoint:
-                browserless_endpoint += f'&token={browser_token}'
-            else:
-                browserless_endpoint += f'?token={browser_token}'
-
-        print(f"🔗 Подключаемся к Browserless: {browserless_endpoint}")
+        print(f"🔗 Подключаемся к Browserless: {webdriver_url}")
 
         driver = webdriver.Remote(
-            command_executor=browserless_endpoint,
+            command_executor=webdriver_url,
             options=chrome_options
         )
+
+        # Устанавливаем таймауты
+        driver.set_page_load_timeout(30)
+        driver.implicitly_wait(10)
 
         # Добавляем скрипт для маскировки веб-драйвера
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
