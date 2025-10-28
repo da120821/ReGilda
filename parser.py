@@ -10,6 +10,7 @@ import pandas as pd
 import re
 import os
 from dotenv import load_dotenv
+import requests
 
 # Загружаем переменные из .env файла
 load_dotenv()
@@ -17,23 +18,29 @@ load_dotenv()
 cookies_file = 'cookies.json'
 
 
+def check_standalone_chrome_health():
+    """Проверяет здоровье standalone Chrome сервиса"""
+    chrome_url = os.getenv('STANDALONE_CHROME_URL', 'http://standalone-chrome.railway.internal:4444')
+
+    try:
+        response = requests.get(f"{chrome_url}/status", timeout=10)
+        if response.status_code == 200:
+            status = response.json()
+            if status['value']['ready']:
+                print("✅ Standalone Chrome здоров и готов к работе")
+                return True
+        print("❌ Standalone Chrome не готов")
+        return False
+    except Exception as e:
+        print(f"❌ Ошибка проверки здоровья standalone Chrome: {e}")
+        return False
+
+
 def setup_driver():
-    """Настраивает Selenium драйвер для Browserless"""
-    # Получаем переменные окружения
-    token = os.getenv('BROWSER_TOKEN')
-    webdriver_endpoint = os.getenv('BROWSER_WEBDRIVER_ENDPOINT')
-
-    print("🔧 Конфигурация Selenium:")
-    print(f"   Token: {token[:10]}..." if token else "❌ Token: НЕ НАЙДЕН")
-    print(f"   WebDriver: {webdriver_endpoint}" if webdriver_endpoint else "❌ WebDriver: НЕ НАЙДЕН")
-
-    if not token or not webdriver_endpoint:
-        print("❌ Отсутствуют обязательные переменные для Selenium")
-        return None
-
+    """Настраивает Selenium драйвер для standalone Chrome на Railway"""
     chrome_options = Options()
 
-    # Аргументы для Chrome
+    # Аргументы для Chrome в production среде
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -42,23 +49,24 @@ def setup_driver():
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--ignore-ssl-errors")
-
-    # Добавляем дополнительные опции для стабильности
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+
+    # Для Railway и подобных облачных сред
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-setuid-sandbox")
+
+    # Дополнительные опции для стабильности
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
     try:
-        # Формируем URL с токеном для Selenium
-        if '?' in webdriver_endpoint:
-            webdriver_url = f"{webdriver_endpoint}&token={token}"
-        else:
-            webdriver_url = f"{webdriver_endpoint}?token={token}"
+        # Получаем URL standalone Chrome сервиса из переменных окружения
+        chrome_service_url = os.getenv('STANDALONE_CHROME_URL', 'http://standalone-chrome.railway.internal:4444')
 
-        print(f"🔗 Подключаемся к Selenium WebDriver: {webdriver_url}")
+        print(f"🔗 Подключаемся к standalone Chrome: {chrome_service_url}")
 
         driver = webdriver.Remote(
-            command_executor=webdriver_url,
+            command_executor=chrome_service_url,
             options=chrome_options
         )
 
@@ -69,17 +77,28 @@ def setup_driver():
         # Добавляем скрипт для маскировки веб-драйвера
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-        print(f"✅ Успешно подключились к Selenium WebDriver")
+        print("✅ Успешно подключились к standalone Chrome")
         return driver
 
     except Exception as e:
-        print(f"❌ Ошибка подключения к Selenium: {e}")
-        return None
+        print(f"❌ Ошибка подключения к standalone Chrome: {e}")
+
+        # Fallback: попробуем локальный Chrome
+        try:
+            print("🔄 Пробуем локальный Chrome как fallback...")
+            from selenium.webdriver.chrome.service import Service
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            print("✅ Успешно запущен локальный Chrome")
+            return driver
+        except Exception as e2:
+            print(f"❌ Локальный Chrome также не сработал: {e2}")
+            return None
 
 
 def check_browserless_connection():
-    """Проверяет подключение к Browserless через Selenium"""
-    print("🔍 Проверяем подключение к Selenium WebDriver...")
+    """Проверяет подключение через standalone Chrome"""
+    print("🔍 Проверяем подключение через standalone Chrome...")
 
     try:
         driver = setup_driver()
@@ -88,17 +107,16 @@ def check_browserless_connection():
             driver.get("https://www.google.com")
             title = driver.title
             driver.quit()
-            print(f"✅ Selenium доступен, заголовок: {title}")
+            print(f"✅ Standalone Chrome доступен, заголовок: {title}")
             return True
         else:
-            print("❌ Selenium недоступен")
+            print("❌ Standalone Chrome недоступен")
             return False
     except Exception as e:
-        print(f"❌ Ошибка проверки Selenium: {e}")
+        print(f"❌ Ошибка проверки standalone Chrome: {e}")
         return False
 
 
-# Все остальные функции парсинга остаются БЕЗ ИЗМЕНЕНИЙ
 def parse_table_for_service(url):
     return parse_table(url)
 
@@ -292,17 +310,21 @@ def load_cookies(driver):
 
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
-    Парсит виртуализированную таблицу бустов через Selenium
+    Парсит виртуализированную таблицу бустов через standalone Chrome
     """
+    # Проверяем здоровье standalone Chrome
+    if not check_standalone_chrome_health():
+        print("⚠️ Standalone Chrome не здоров, но продолжаем попытку...")
+
     # Сначала проверяем подключение
     if not check_browserless_connection():
-        print("❌ Selenium недоступен, пропускаем парсинг")
+        print("❌ Standalone Chrome недоступен, пропускаем парсинг")
         return pd.DataFrame()
 
-    # Настройка браузера через Selenium
+    # Настройка браузера через standalone Chrome
     driver = setup_driver()
     if not driver:
-        print("❌ Не удалось подключиться к Selenium")
+        print("❌ Не удалось подключиться к standalone Chrome")
         return pd.DataFrame()
 
     wait = WebDriverWait(driver, 30)
@@ -506,15 +528,17 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
 # Добавляем точку входа для тестирования
 if __name__ == "__main__":
-    print("🔧 Тестируем Selenium парсер...")
+    print("🔧 Тестируем standalone Chrome парсер...")
 
-    # Сначала проверяем подключение
+    # Проверяем health
+    check_standalone_chrome_health()
+
     if check_browserless_connection():
         result = parse_table()
         if not result.empty:
-            print("✅ Selenium парсер работает успешно!")
+            print("✅ Standalone Chrome парсер работает успешно!")
             print(result.head())
         else:
             print("❌ Парсер не смог собрать данные")
     else:
-        print("❌ Не удалось подключиться к Selenium")
+        print("❌ Не удалось подключиться к standalone Chrome")
