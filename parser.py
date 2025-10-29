@@ -251,17 +251,13 @@ def load_cookies(driver):
         if cookies_json:
             cookies = json.loads(cookies_json)
             print("✅ Куки загружены из переменных окружения")
-        elif os.path.exists(cookies_file):
-            with open(cookies_file, 'r', encoding='utf-8') as file:
-                cookies = json.load(file)
-            print("✅ Куки загружены из файла")
         else:
-            print("❌ Куки не найдены ни в переменных окружения, ни в файле")
+            print("❌ Куки не найдены в переменных окружения")
             return False
 
-        # Сначала переходим на ТОЧНЫЙ домен, чтобы установить куки
-        print("Переходим на точный домен для установки кук...")
-        driver.get("https://remanga.org")
+        # Переходим на домен ТОЧНО как в куках
+        print("Переходим на домен для установки кук...")
+        driver.get("https://remanga.org")  # Без www!
         time.sleep(3)
 
         # Удаляем существующие куки
@@ -270,77 +266,50 @@ def load_cookies(driver):
         cookies_added = 0
         for cookie in cookies:
             try:
-                # Создаем копию куки только с нужными полями
+                # Оставляем оригинальный домен С ТОЧКОЙ
                 cookie_copy = {
-                    'name': cookie.get('name'),
-                    'value': cookie.get('value'),
-                    'path': cookie.get('path', '/')
+                    'name': cookie['name'],
+                    'value': cookie['value'],
+                    'domain': cookie['domain'],  # Оставляем как есть ".remanga.org"
+                    'path': cookie['path'],
+                    'secure': cookie.get('secure', False),
+                    'httpOnly': cookie.get('httpOnly', False)
                 }
 
-                # Для secure кук НЕ указываем домен вообще
-                if cookie.get('secure'):
-                    print(f"🔒 Secure куки {cookie['name']} - добавляем без домена")
-                else:
-                    # Для не-secure кук обрабатываем домен
-                    domain = cookie.get('domain', '')
-                    if domain and domain.startswith('.'):
-                        domain = domain[1:]  # Убираем точку
-                    if domain and 'remanga.org' in domain:
-                        cookie_copy['domain'] = domain
+                # Добавляем expiry если есть
+                if 'expiry' in cookie:
+                    cookie_copy['expiry'] = cookie['expiry']
 
-                # Добавляем остальные поля если они есть
-                if cookie.get('expiry'):
-                    cookie_copy['expiry'] = cookie.get('expiry')
-                if cookie.get('httpOnly'):
-                    cookie_copy['httpOnly'] = cookie.get('httpOnly')
-                if cookie.get('secure'):
-                    cookie_copy['secure'] = cookie.get('secure')
-                if cookie.get('sameSite'):
-                    cookie_copy['sameSite'] = cookie.get('sameSite')
+                # Добавляем sameSite если есть
+                if 'sameSite' in cookie:
+                    cookie_copy['sameSite'] = cookie['sameSite']
 
-                # Добавляем куки
+                print(f"🔄 Добавляем куки: {cookie['name']} для домена {cookie['domain']}")
+
                 driver.add_cookie(cookie_copy)
                 cookies_added += 1
-                print(f"✅ Добавлен куки: {cookie_copy['name']}")
+                print(f"✅ Успешно добавлен: {cookie['name']}")
 
             except Exception as e:
-                print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
-                # Пробуем упрощенный вариант без домена
-                try:
-                    simplified_cookie = {
-                        'name': cookie.get('name'),
-                        'value': cookie.get('value'),
-                        'path': cookie.get('path', '/')
-                    }
-                    driver.add_cookie(simplified_cookie)
-                    cookies_added += 1
-                    print(f"✅ Куки {cookie['name']} добавлен в упрощенном формате")
-                except Exception as e2:
-                    print(f"❌ Не удалось добавить куки {cookie['name']} даже в упрощенном формате: {e2}")
+                print(f"❌ Ошибка добавления куки {cookie.get('name')}: {e}")
+                continue
 
         print(f"✅ Успешно добавлено {cookies_added} куков")
 
-        # Обновляем страницу чтобы применились куки
-        print("🔄 Обновляем страницу для применения кук...")
-        driver.refresh()
-        time.sleep(3)
-
-        # Проверяем куки
+        # ПРОВЕРЯЕМ что куки добавились
         current_cookies = driver.get_cookies()
         print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
 
-        # Выводим список добавленных куков для отладки
-        for cookie in current_cookies:
-            print(f"   - {cookie['name']}: {cookie.get('domain', 'no domain')}")
+        for c in current_cookies:
+            print(f"   - {c['name']} (домен: {c.get('domain', 'нет')})")
 
-        return True
+        return cookies_added > 0
 
     except Exception as e:
         print(f"❌ Ошибка загрузки куки: {e}")
         import traceback
         traceback.print_exc()
         return False
-
 
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
