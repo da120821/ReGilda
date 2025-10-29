@@ -121,103 +121,87 @@ def login_to_remanga(driver):
         # Переходим на главную страницу
         main_url = "https://remanga.org"
         driver.get(main_url)
-        print("⏳ Ждем загрузки страницы...")
-        time.sleep(8)  # Увеличиваем время ожидания
+        time.sleep(5)
 
-        # Сохраняем страницу для анализа
-        with open('debug_main_page.html', 'w', encoding='utf-8') as f:
-            f.write(driver.page_source)
-        print("✅ Сохранена HTML страница: debug_main_page.html")
+        print("🔍 Ищем кнопку 'Вход/Регистрация'...")
 
-        print("🔍 Детальный поиск кнопки 'Вход/Регистрация'...")
-
-        # Вариант 1: Точный селектор
-        print("🔎 Поиск по селектору: button[data-sentry-component='UserAuthButtonMenuItem']")
-        elements = driver.find_elements(By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']")
-        print(f"Найдено элементов по селектору: {len(elements)}")
-
-        # Вариант 2: По тексту
-        print("🔎 Поиск по тексту 'Вход/Регистрация'")
-        elements_by_text = driver.find_elements(By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]")
-        print(f"Найдено элементов по тексту: {len(elements_by_text)}")
-
-        # Вариант 3: Все кнопки с текстом содержащим "Вход" или "Регистрация"
-        print("🔎 Поиск всех кнопок с текстом 'Вход' или 'Регистрация'")
-        all_buttons = driver.find_elements(By.TAG_NAME, "button")
-        auth_buttons = []
-        for btn in all_buttons:
-            try:
-                text = btn.text.strip()
-                if text and ('вход' in text.lower() or 'регистрация' in text.lower() or 'войти' in text.lower()):
-                    auth_buttons.append(btn)
-                    print(f"Найдена кнопка: '{text}'")
-            except:
-                pass
-        print(f"Всего найдено подходящих кнопок: {len(auth_buttons)}")
-
-        # Вариант 4: Поиск по классам из вашего HTML
-        print("🔎 Поиск по классам .cs-button")
-        cs_buttons = driver.find_elements(By.CSS_SELECTOR, ".cs-button")
-        print(f"Найдено кнопок с классом .cs-button: {len(cs_buttons)}")
-        for i, btn in enumerate(cs_buttons):
-            try:
-                print(f"  Кнопка {i + 1}: текст='{btn.text}', классы='{btn.get_attribute('class')}'")
-            except:
-                pass
-
-        # Пробуем использовать найденные элементы
-        login_button = None
-        if elements:
-            login_button = elements[0]
-            print("✅ Используем кнопку найденную по селектору")
-        elif elements_by_text:
-            login_button = elements_by_text[0]
-            print("✅ Используем кнопку найденную по тексту")
-        elif auth_buttons:
-            login_button = auth_buttons[0]
-            print("✅ Используем первую подходящую кнопку")
-        elif cs_buttons:
-            # Берем первую cs-button с текстом
-            for btn in cs_buttons:
-                if btn.text.strip():
-                    login_button = btn
-                    print(f"✅ Используем cs-button с текстом: '{btn.text}'")
-                    break
-
-        if login_button:
-            print(f"🖱️ Нажимаем кнопку: '{login_button.text}'")
-            driver.execute_script("arguments[0].click();", login_button)
-            time.sleep(5)
-        else:
-            print("❌ Ни одна кнопка не найдена, переходим напрямую на /signin")
+        # Способ 1: Используем JavaScript для поиска элемента
+        print("🔄 Используем JavaScript для поиска...")
+        try:
+            # Ищем элемент через JavaScript
+            login_button = driver.execute_script("""
+                return document.querySelector("button[data-sentry-component='UserAuthButtonMenuItem']");
+            """)
+            if login_button:
+                print("✅ Найдена кнопка через JavaScript")
+                driver.execute_script("arguments[0].click();", login_button)
+            else:
+                # Ищем по тексту через JavaScript
+                login_button = driver.execute_script("""
+                    var buttons = document.querySelectorAll('button');
+                    for (var i = 0; i < buttons.length; i++) {
+                        if (buttons[i].textContent.includes('Вход/Регистрация')) {
+                            return buttons[i];
+                        }
+                    }
+                    return null;
+                """)
+                if login_button:
+                    print("✅ Найдена кнопка по тексту через JavaScript")
+                    driver.execute_script("arguments[0].click();", login_button)
+                else:
+                    print("❌ Кнопка не найдена через JavaScript")
+                    # Переходим напрямую
+                    login_url = "https://remanga.org/signin"
+                    driver.get(login_url)
+        except Exception as e:
+            print(f"❌ Ошибка JavaScript: {e}")
+            # Переходим напрямую
             login_url = "https://remanga.org/signin"
             driver.get(login_url)
-            time.sleep(5)
 
-        # Дальше код заполнения формы остается таким же...
+        time.sleep(3)
+
+        # Теперь заполняем форму входа
         print("🔍 Ищем поля формы входа...")
 
-        # Селекторы для поля логина/почты
-        username_selectors = [
+        # Пробуем разные селекторы для формы
+        form_selectors = [
             "input[name='fields.login.user']",
-            "input[placeholder*='Логин/почта']",
-            "input[autocomplete='username']"
+            "input[autocomplete='username']",
+            "input[placeholder*='Логин']",
+            "input[placeholder*='логин']",
+            "input[type='text']"
         ]
 
         username_field = None
-        for selector in username_selectors:
+        for selector in form_selectors:
             try:
-                username_field = driver.find_element(By.CSS_SELECTOR, selector)
-                if username_field.is_displayed():
-                    print(f"✅ Найдено поле логина: {selector}")
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                for elem in elements:
+                    if elem.is_displayed():
+                        username_field = elem
+                        print(f"✅ Найдено поле логина: {selector}")
+                        break
+                if username_field:
                     break
-                else:
-                    username_field = None
             except:
                 continue
 
         if not username_field:
             print("❌ Не найдено поле для ввода логина")
+            # Выведем все input элементы для отладки
+            all_inputs = driver.find_elements(By.TAG_NAME, 'input')
+            print(f"📝 Все input элементы ({len(all_inputs)}):")
+            for i, inp in enumerate(all_inputs):
+                try:
+                    input_type = inp.get_attribute('type')
+                    input_name = inp.get_attribute('name')
+                    input_placeholder = inp.get_attribute('placeholder')
+                    print(
+                        f"  Input {i + 1}: type='{input_type}', name='{input_name}', placeholder='{input_placeholder}'")
+                except:
+                    pass
             return False
 
         # Вводим логин
@@ -226,23 +210,25 @@ def login_to_remanga(driver):
         print("✅ Ввели логин")
         time.sleep(1)
 
-        # Селекторы для поля пароля
+        # Ищем поле пароля
         password_selectors = [
             "input[name='fields.login.password']",
             "input[type='password']",
-            "input[placeholder*='Пароль']",
-            "input[autocomplete='current-password']"
+            "input[autocomplete='current-password']",
+            "input[placeholder*='Пароль']"
         ]
 
         password_field = None
         for selector in password_selectors:
             try:
-                password_field = driver.find_element(By.CSS_SELECTOR, selector)
-                if password_field.is_displayed():
-                    print(f"✅ Найдено поле пароля: {selector}")
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                for elem in elements:
+                    if elem.is_displayed():
+                        password_field = elem
+                        print(f"✅ Найдено поле пароля: {selector}")
+                        break
+                if password_field:
                     break
-                else:
-                    password_field = None
             except:
                 continue
 
@@ -256,9 +242,10 @@ def login_to_remanga(driver):
         print("✅ Ввели пароль")
         time.sleep(1)
 
-        # Ищем кнопку отправки формы
-        submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Войти')]")
-        if submit_button:
+        # Ищем кнопку входа
+        submit_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Войти')]")
+        if submit_buttons:
+            submit_button = submit_buttons[0]
             print("🖱️ Нажимаем кнопку 'Войти'...")
             driver.execute_script("arguments[0].click();", submit_button)
         else:
