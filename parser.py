@@ -121,31 +121,12 @@ def login_to_remanga(driver):
         main_url = "https://remanga.org"
         driver.get(main_url)
 
-        # ЖДЕМ ПОЛНОЙ ЗАГРУЗКИ СТРАНИЦЫ
-        print("⏳ Ожидаем полной загрузки страницы...")
-
-        # Детали для отладки
-        print("=== ДЕТАЛЬНАЯ ОТЛАДКА СТРАНИЦЫ ===")
-        print(f"📄 Заголовок: {driver.title}")
-        print(f"🌐 URL: {driver.current_url}")
-
-        page_text = driver.page_source[:2000]
-        print(f"📝 Начало страницы: {page_text}")
-
-        # Проверка ошибок доступа
-        error_indicators = ["доступ запрещен", "access denied", "войдите", "sign in", "login"]
-        page_lower = page_text.lower()
-        for indicator in error_indicators:
-            if indicator in page_lower:
-                print(f"🚫 Найдено: '{indicator}' - требуется авторизация")
-        print("=== КОНЕЦ ОТЛАДКИ ===")
-
         # Ждем полной загрузки DOM
         WebDriverWait(driver, 15).until(
             lambda driver: driver.execute_script("return document.readyState") == "complete"
         )
         print("✅ DOM полностью загружен")
-        time.sleep(3)
+        time.sleep(2)
 
         # ОЖИДАЕМ появления кнопки 'Вход/Регистрация'
         print("🔍 Ожидаем появления кнопки 'Вход/Регистрация'...")
@@ -153,22 +134,15 @@ def login_to_remanga(driver):
         try:
             # Ждем появления и кликабельности кнопки по селектору
             login_button = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"))
-            )
-            print("✅ Кнопка найдена после ожидания")
-
-            # Ждем, пока она станет кликабельной
-            login_button = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"))
             )
-            print("✅ Кнопка кликабельна")
+            print("✅ Кнопка найдена и кликабельна")
         except Exception as e:
             print(f"❌ Кнопка не появилась за 10 секунд: {e}")
             print("🔄 Пробуем альтернативный поиск по тексту...")
             try:
                 login_button = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]"))
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]"))
                 )
                 print("✅ Нашли кнопку по тексту")
             except:
@@ -184,32 +158,72 @@ def login_to_remanga(driver):
             print(f"❌ Ошибка клика: {e}")
             return False
 
-        # Ждем открытия формы входа
-        print("⏳ Ожидаем открытия формы входа...")
+        # Ждем открытия модального окна входа
+        print("⏳ Ожидаем открытия модального окна входа...")
         time.sleep(3)
 
-        # ОЖИДАЕМ появления полей формы
+        # ОЖИДАЕМ появления полей формы в модальном окне
         print("🔍 Ожидаем появления полей формы...")
 
         try:
-            username_field = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='fields.login.user']"))
-            )
-            print("✅ Поле логина найдено")
-        except:
-            print("❌ Поле логина не найдено")
+            # Ищем поле логина/email - пробуем разные селекторы
+            username_selectors = [
+                "input[name='login']",
+                "input[name='username']",
+                "input[name='email']",
+                "input[type='text']",
+                "input[placeholder*='логин' i]",
+                "input[placeholder*='email' i]"
+            ]
+
+            username_field = None
+            for selector in username_selectors:
+                try:
+                    username_field = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    print(f"✅ Поле логина найдено с селектором: {selector}")
+                    break
+                except:
+                    continue
+
+            if not username_field:
+                print("❌ Поле логина не найдено")
+                return False
+
+        except Exception as e:
+            print(f"❌ Ошибка поиска поля логина: {e}")
             return False
 
         try:
-            password_field = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='fields.login.password']"))
-            )
-            print("✅ Поле пароля найдено")
-        except:
-            print("❌ Поле пароля не найдено")
+            # Ищем поле пароля - пробуем разные селекторы
+            password_selectors = [
+                "input[name='password']",
+                "input[type='password']",
+                "input[placeholder*='пароль' i]"
+            ]
+
+            password_field = None
+            for selector in password_selectors:
+                try:
+                    password_field = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    print(f"✅ Поле пароля найдено с селектором: {selector}")
+                    break
+                except:
+                    continue
+
+            if not password_field:
+                print("❌ Поле пароля не найдено")
+                return False
+
+        except Exception as e:
+            print(f"❌ Ошибка поиска поля пароля: {e}")
             return False
 
         # Заполняем поля формы
+        print("⌨️ Заполняем форму входа...")
         username_field.clear()
         username_field.send_keys(username)
         print("✅ Ввели логин")
@@ -220,31 +234,71 @@ def login_to_remanga(driver):
         print("✅ Ввели пароль")
         time.sleep(1)
 
-        # Кликаем кнопку Войти или отправляем Enter
-        try:
-            submit_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Войти')]"))
-            )
-            driver.execute_script("arguments[0].click();", submit_button)
-            print("✅ Кликнули 'Войти'")
-        except:
-            print("⌨️ Отправляем форму Enter...")
+        # Ищем и кликаем кнопку входа
+        print("🔍 Ищем кнопку входа...")
+        submit_selectors = [
+            "button[type='submit']",
+            "button[class*='login']",
+            "button[class*='submit']",
+            "//button[contains(text(), 'Войти')]",
+            "//button[contains(text(), 'Вход')]",
+            "//button[contains(text(), 'Login')]"
+        ]
+
+        submit_button = None
+        for selector in submit_selectors:
+            try:
+                if selector.startswith("//"):
+                    submit_button = WebDriverWait(driver, 2).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                else:
+                    submit_button = WebDriverWait(driver, 2).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    )
+                print(f"✅ Кнопка входа найдена с селектором: {selector}")
+                break
+            except:
+                continue
+
+        if submit_button:
+            try:
+                driver.execute_script("arguments[0].click();", submit_button)
+                print("✅ Кликнули кнопку входа")
+            except Exception as e:
+                print(f"❌ Ошибка клика по кнопке: {e}")
+                # Пробуем отправить форму через Enter
+                password_field.send_keys(Keys.RETURN)
+                print("⌨️ Отправляем форму Enter...")
+        else:
+            print("⌨️ Кнопка не найдена, отправляем форму Enter...")
             password_field.send_keys(Keys.RETURN)
 
         # Ждем завершения входа
         print("⏳ Ожидаем завершения входа...")
         time.sleep(5)
 
-        # Проверка успешности входа
+        # Проверка успешности входа несколькими способами
         current_url = driver.current_url
         print(f"📄 Текущий URL: {current_url}")
 
+        # Проверяем, что мы не на странице входа
         if "signin" not in current_url and "login" not in current_url:
-            print("✅ Успешно вошли в систему")
+            print("✅ Успешно вошли в систему (проверка по URL)")
             return True
         else:
-            print("❌ Не удалось войти в систему")
-            return False
+            # Дополнительная проверка по изменению интерфейса
+            try:
+                # После входа кнопка должна измениться на что-то другое
+                WebDriverWait(driver, 5).until_not(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"))
+                )
+                print("✅ Успешно вошли в систему (кнопка изменилась)")
+                return True
+            except:
+                print("❌ Не удалось войти в систему")
+                return False
 
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
