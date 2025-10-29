@@ -118,52 +118,122 @@ def login_to_remanga(driver):
 
         print("🔐 Выполняем вход на remanga.org...")
 
-        # Переходим на страницу входа
-        login_url = "https://remanga.org/signin"
-        driver.get(login_url)
+        # Переходим на главную страницу
+        main_url = "https://remanga.org"
+        driver.get(main_url)
         time.sleep(3)
 
-        # Ждем загрузки формы входа
+        # Ждем загрузки страницы
         wait = WebDriverWait(driver, 15)
 
-        # Пробуем разные селекторы для поля логина
+        print("🔍 Ищем кнопку 'Вход/Регистрация'...")
+
+        # Селекторы для кнопки входа/регистрации
+        login_button_selectors = [
+            "button:contains('Вход')",
+            "button:contains('Войти')",
+            "button:contains('Регистрация')",
+            "a:contains('Вход')",
+            "a:contains('Войти')",
+            "a:contains('Регистрация')",
+            ".login-button",
+            ".auth-button",
+            "[data-testid='login-button']",
+            "button.auth-btn",
+            "a.auth-link"
+        ]
+
+        login_button = None
+        for selector in login_button_selectors:
+            try:
+                if "contains" in selector:
+                    text = re.search(r":contains\('([^']+)'\)", selector).group(1)
+                    login_button = driver.find_element(By.XPATH, f"//*[contains(text(), '{text}')]")
+                else:
+                    login_button = driver.find_element(By.CSS_SELECTOR, selector)
+
+                if login_button.is_displayed() and login_button.is_enabled():
+                    print(f"✅ Найдена кнопка: {selector}")
+                    break
+                else:
+                    login_button = None
+            except:
+                continue
+
+        if not login_button:
+            print("❌ Не найдена кнопка 'Вход/Регистрация'")
+            return False
+
+        # Нажимаем кнопку входа
+        print("🖱️ Нажимаем кнопку входа...")
+        driver.execute_script("arguments[0].click();", login_button)
+        time.sleep(3)
+
+        # Ждем появления формы входа
+        print("⏳ Ждем появления формы входа...")
+        time.sleep(3)
+
+        # Теперь используем правильные селекторы из HTML структуры
+        print("🔍 Ищем поля формы входа...")
+
+        # Селекторы для поля логина/почты
         username_selectors = [
+            "input[name='fields.login.user']",
+            "input[placeholder*='Логин/почта']",
+            "input[autocomplete='username']",
             "input[name='username']",
             "input[name='email']",
-            "input[type='text']",
-            "input[placeholder*='логин']",
-            "input[placeholder*='email']",
-            "input[placeholder*='login']"
+            "input[type='text']"
         ]
 
         username_field = None
         for selector in username_selectors:
             try:
                 username_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-                break
+                if username_field.is_displayed():
+                    print(f"✅ Найдено поле логина: {selector}")
+                    break
+                else:
+                    username_field = None
             except:
                 continue
 
         if not username_field:
             print("❌ Не найдено поле для ввода логина")
+            # Покажем все input элементы на странице для отладки
+            all_inputs = driver.find_elements(By.TAG_NAME, 'input')
+            print(f"📝 Все input элементы на странице ({len(all_inputs)}):")
+            for i, input_elem in enumerate(all_inputs):
+                input_type = input_elem.get_attribute('type')
+                input_name = input_elem.get_attribute('name')
+                input_placeholder = input_elem.get_attribute('placeholder')
+                print(f"  Input {i + 1}: type='{input_type}', name='{input_name}', placeholder='{input_placeholder}'")
             return False
 
+        # Вводим логин
         username_field.clear()
         username_field.send_keys(username)
         print("✅ Ввели логин")
+        time.sleep(1)
 
-        # Пробуем разные селекторы для поля пароля
+        # Селекторы для поля пароля
         password_selectors = [
-            "input[name='password']",
+            "input[name='fields.login.password']",
             "input[type='password']",
-            "input[placeholder*='парол']"
+            "input[placeholder*='Пароль']",
+            "input[autocomplete='current-password']",
+            "input[name='password']"
         ]
 
         password_field = None
         for selector in password_selectors:
             try:
                 password_field = driver.find_element(By.CSS_SELECTOR, selector)
-                break
+                if password_field.is_displayed():
+                    print(f"✅ Найдено поле пароля: {selector}")
+                    break
+                else:
+                    password_field = None
             except:
                 continue
 
@@ -171,44 +241,55 @@ def login_to_remanga(driver):
             print("❌ Не найдено поле для ввода пароля")
             return False
 
+        # Вводим пароль
         password_field.clear()
         password_field.send_keys(password)
         print("✅ Ввели пароль")
+        time.sleep(1)
 
-        # Пробуем разные селекторы для кнопки входа
-        login_button_selectors = [
+        # Ищем кнопку отправки формы - используем правильный селектор из HTML
+        submit_selectors = [
             "button[type='submit']",
-            "button.signin-form__button",
-            ".signin-form__button",
-            "button.btn-primary",
-            "input[type='submit']"
+            "button:contains('Войти')",
+            "button.cs-button[type='submit']",
+            "button[data-slot='button']"
         ]
 
-        login_button = None
-        for selector in login_button_selectors:
+        submit_button = None
+        for selector in submit_selectors:
             try:
-                login_button = driver.find_element(By.CSS_SELECTOR, selector)
-                if login_button.is_displayed() and login_button.is_enabled():
+                if "contains" in selector:
+                    submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Войти')]")
+                else:
+                    submit_button = driver.find_element(By.CSS_SELECTOR, selector)
+
+                if submit_button and submit_button.is_displayed() and submit_button.is_enabled():
+                    print(f"✅ Найдена кнопка отправки: {selector}")
                     break
+                else:
+                    submit_button = None
             except:
                 continue
 
-        if login_button:
-            login_button.click()
-            print("✅ Нажали кнопку входа")
+        if submit_button:
+            print("🖱️ Нажимаем кнопку 'Войти'...")
+            driver.execute_script("arguments[0].click();", submit_button)
         else:
             # Альтернатива: нажимаем Enter в поле пароля
+            print("⌨️ Отправляем форму нажатием Enter...")
             password_field.send_keys(Keys.RETURN)
-            print("✅ Отправили форму нажатием Enter")
 
         # Ждем завершения входа
+        print("⏳ Ожидаем завершения входа...")
         time.sleep(5)
 
         # Проверяем успешность входа
         current_url = driver.current_url
+        print(f"📄 Текущий URL: {current_url}")
 
-        # Если нас перенаправило с страницы входа - вероятно успешный вход
-        if "signin" not in current_url and "login" not in current_url:
+        # Проверяем, что мы не на странице входа
+        page_source = driver.page_source.lower()
+        if "signin" not in current_url and "login" not in current_url and "вход" not in page_source:
             print("✅ Успешно вошли в систему")
 
             # Дополнительная проверка: ищем элементы профиля
@@ -218,14 +299,16 @@ def login_to_remanga(driver):
                 "a[href*='profile']",
                 ".user-avatar",
                 "[data-testid='user-menu']",
-                "img[alt*='avatar']"
+                "img[alt*='avatar']",
+                ".user-menu",
+                ".account-menu"
             ]
 
             for indicator in profile_indicators:
                 try:
                     profile_element = driver.find_element(By.CSS_SELECTOR, indicator)
                     if profile_element.is_displayed():
-                        print("✅ Найден элемент профиля пользователя")
+                        print(f"✅ Найден элемент профиля: {indicator}")
                         return True
                 except:
                     continue
@@ -234,15 +317,26 @@ def login_to_remanga(driver):
             return True
         else:
             # Проверяем наличие сообщений об ошибке
-            page_source = driver.page_source.lower()
-            if "неверный логин или пароль" in page_source or "invalid login" in page_source:
-                print("❌ Неверный логин или пароль")
-            else:
-                print("❌ Не удалось войти в систему - остались на странице входа")
+            error_messages = [
+                "неверный логин или пароль",
+                "invalid login",
+                "ошибка входа",
+                "login error",
+                "неправильный пароль"
+            ]
+
+            for error_msg in error_messages:
+                if error_msg in page_source:
+                    print(f"❌ Ошибка входа: {error_msg}")
+                    return False
+
+            print("❌ Не удалось войти в систему - остались на странице входа")
             return False
 
     except Exception as e:
         print(f"❌ Ошибка при входе в систему: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
