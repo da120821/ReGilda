@@ -272,31 +272,45 @@ def load_cookies(driver):
             try:
                 # Убираем лишние поля которые могут мешать
                 cookie_copy = {k: v for k, v in cookie.items()
-                               if k in ['name', 'value', 'domain', 'path', 'expiry', 'secure', 'httpOnly']}
+                               if k in ['name', 'value', 'domain', 'path', 'expiry', 'secure', 'httpOnly', 'sameSite']}
 
-                # Убеждаемся, что домен правильный
+                # Обрабатываем домен - убираем точку в начале
                 if 'domain' in cookie_copy:
-                    if cookie_copy['domain'].startswith('.'):
-                        cookie_copy['domain'] = cookie_copy['domain'][1:]
-                    # Убеждаемся, что домен соответствует remanga.org
-                    if 'remanga.org' not in cookie_copy['domain']:
-                        continue
+                    domain = cookie_copy['domain']
+                    if domain.startswith('.'):
+                        cookie_copy['domain'] = domain[1:]  # Убираем точку
+                        print(f"🔄 Исправлен домен: {domain} -> {cookie_copy['domain']}")
 
+                # Убеждаемся, что домен соответствует remanga.org
+                if 'domain' in cookie_copy and 'remanga.org' not in cookie_copy['domain']:
+                    print(f"⚠️ Пропускаем куки с неправильным доменом: {cookie_copy['domain']}")
+                    continue
+
+                # Добавляем куки
                 driver.add_cookie(cookie_copy)
                 cookies_added += 1
+                print(f"✅ Добавлен куки: {cookie_copy['name']}")
+
             except Exception as e:
                 print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
+                continue
 
-        print(f"✅ Добавлено {cookies_added} куков")
+        print(f"✅ Успешно добавлено {cookies_added} куков")
 
         # Проверяем куки
         current_cookies = driver.get_cookies()
         print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
 
+        # Выводим список добавленных куков для отладки
+        for cookie in current_cookies:
+            print(f"   - {cookie['name']}: {cookie['domain']}")
+
         return True
 
     except Exception as e:
         print(f"❌ Ошибка загрузки куки: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
