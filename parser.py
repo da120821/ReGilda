@@ -124,85 +124,60 @@ def login_to_remanga(driver):
 
         print("🔍 Ищем кнопку 'Вход/Регистрация'...")
 
-        # Пробуем разные способы найти и кликнуть кнопку
-        login_button = None
-
-        # Способ 1: Поиск через JavaScript и клик
+        # ПРОСТОЙ И НАДЕЖНЫЙ СПОСОБ - JavaScript клик
         try:
-            login_button = driver.execute_script("""
-                var btn = document.querySelector("button[data-sentry-component='UserAuthButtonMenuItem']");
-                if (btn) {
-                    btn.click();
+            # Используем JavaScript чтобы найти и кликнуть кнопку
+            result = driver.execute_script("""
+                // Ищем кнопку по селектору
+                var button = document.querySelector("button[data-sentry-component='UserAuthButtonMenuItem']");
+                if (button) {
+                    button.click();
+                    console.log('✅ Кликнули по кнопке Вход/Регистрация');
                     return true;
+                } else {
+                    console.log('❌ Кнопка не найдена');
+                    return false;
                 }
-                return false;
             """)
-            if login_button:
-                print("✅ Кликнули по кнопке через JavaScript")
+
+            if result:
+                print("✅ Успешно кликнули по кнопке 'Вход/Регистрация' через JavaScript")
             else:
-                print("❌ Не найдена кнопка через JavaScript")
+                print("❌ Кнопка не найдена через JavaScript")
+                return False
+
         except Exception as e:
-            print(f"❌ Ошибка JavaScript клика: {e}")
+            print(f"❌ Ошибка при клике через JavaScript: {e}")
+            return False
 
-        # Если JavaScript не сработал, пробуем обычные методы
-        if not login_button:
-            try:
-                # Ищем кнопку
-                login_button = driver.find_element(By.CSS_SELECTOR,
-                                                   "button[data-sentry-component='UserAuthButtonMenuItem']")
-                print("✅ Нашли кнопку через Selenium")
-
-                # Пробуем разные способы клика
-                try:
-                    # Способ 1: Простой клик
-                    login_button.click()
-                    print("✅ Кликнули простым click()")
-                except:
-                    # Способ 2: JavaScript клик
-                    driver.execute_script("arguments[0].click();", login_button)
-                    print("✅ Кликнули через JavaScript")
-
-            except Exception as e:
-                print(f"❌ Не удалось найти или кликнуть кнопку: {e}")
-                # Переходим напрямую на страницу входа
-                login_url = "https://remanga.org/signin"
-                driver.get(login_url)
-                print("🔄 Перешли напрямую на страницу входа")
-
+        # Ждем открытия формы входа
+        print("⏳ Ждем открытия формы входа...")
         time.sleep(3)
 
-        # Дальше заполнение формы...
+        # Заполняем форму входа
         print("🔍 Ищем поля формы входа...")
 
-        # Поиск поля логина
-        username_field = None
+        # Поле логина
         try:
             username_field = driver.find_element(By.CSS_SELECTOR, "input[name='fields.login.user']")
-            print("✅ Нашли поле логина")
+            username_field.clear()
+            username_field.send_keys(username)
+            print("✅ Ввели логин")
+            time.sleep(1)
         except:
             print("❌ Не найдено поле логина")
             return False
 
-        # Заполняем логин
-        username_field.clear()
-        username_field.send_keys(username)
-        print("✅ Ввели логин")
-        time.sleep(1)
-
-        # Поиск поля пароля
-        password_field = None
+        # Поле пароля
         try:
             password_field = driver.find_element(By.CSS_SELECTOR, "input[name='fields.login.password']")
-            print("✅ Нашли поле пароля")
+            password_field.clear()
+            password_field.send_keys(password)
+            print("✅ Ввели пароль")
+            time.sleep(1)
         except:
             print("❌ Не найдено поле пароля")
             return False
-
-        # Заполняем пароль
-        password_field.clear()
-        password_field.send_keys(password)
-        print("✅ Ввели пароль")
-        time.sleep(1)
 
         # Клик по кнопке "Войти"
         try:
@@ -213,9 +188,13 @@ def login_to_remanga(driver):
             print("⌨️ Отправляем форму нажатием Enter...")
             password_field.send_keys(Keys.RETURN)
 
-        # Ждем и проверяем вход
+        # Ждем завершения входа
+        print("⏳ Ожидаем завершения входа...")
         time.sleep(5)
+
+        # Проверяем успешность входа
         current_url = driver.current_url
+        print(f"📄 Текущий URL: {current_url}")
 
         if "signin" not in current_url and "login" not in current_url:
             print("✅ Успешно вошли в систему")
@@ -226,6 +205,8 @@ def login_to_remanga(driver):
 
     except Exception as e:
         print(f"❌ Ошибка при входе в систему: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def clean_text(text):
