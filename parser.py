@@ -121,63 +121,48 @@ def login_to_remanga(driver):
         # Переходим на главную страницу
         main_url = "https://remanga.org"
         driver.get(main_url)
-        time.sleep(3)
+        time.sleep(5)
 
         # Ждем загрузки страницы
-        wait = WebDriverWait(driver, 15)
+        wait = WebDriverWait(driver, 20)
 
-        print("🔍 Ищем кнопку 'Вход/Регистрация'...")
+        print("🔍 Ищем кнопку 'Вход/Регистрация' по точному селектору...")
 
-        # Точный селектор для кнопки "Вход/Регистрация"
-        login_button_selectors = [
-            "button[data-sentry-component='UserAuthButtonMenuItem']",
-            "button:contains('Вход/Регистрация')",
-            ".cs-button[data-sentry-component='UserAuthButtonMenuItem']"
-        ]
+        # Используем ТОЛЬКО ваш селектор
+        exact_selector = "button[data-sentry-component='UserAuthButtonMenuItem']"
 
-        login_button = None
-        for selector in login_button_selectors:
+        try:
+            login_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, exact_selector)))
+            print(f"✅ Найдена кнопка по селектору: {exact_selector}")
+            print(f"📝 Текст кнопки: '{login_button.text}'")
+        except:
+            print(f"❌ Не найдена кнопка по селектору: {exact_selector}")
+            print("🔄 Пробуем найти через XPath по тексту...")
             try:
-                if "contains" in selector:
-                    login_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]")
-                else:
-                    login_button = driver.find_element(By.CSS_SELECTOR, selector)
-
-                if login_button.is_displayed() and login_button.is_enabled():
-                    print(f"✅ Найдена кнопка: {selector}")
-                    break
-                else:
-                    login_button = None
+                login_button = wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]")))
+                print("✅ Найдена кнопка по тексту 'Вход/Регистрация'")
             except:
-                continue
+                print("❌ Кнопка не найдена ни по селектору, ни по тексту")
+                print("🔄 Переходим напрямую на страницу входа...")
+                login_url = "https://remanga.org/signin"
+                driver.get(login_url)
+                time.sleep(5)
 
-        if not login_button:
-            print("❌ Не найдена кнопка 'Вход/Регистрация'")
-            # Попробуем найти другие кнопки входа
-            alternative_buttons = driver.find_elements(By.XPATH,
-                                                       "//button[contains(text(), 'Вход') or contains(text(), 'Войти')]")
-            if alternative_buttons:
-                login_button = alternative_buttons[0]
-                print(f"✅ Найдена альтернативная кнопка: {login_button.text}")
-            else:
-                return False
+        # Если нашли кнопку, нажимаем ее
+        if 'login_button' in locals() and login_button:
+            print("🖱️ Нажимаем кнопку входа...")
+            driver.execute_script("arguments[0].click();", login_button)
+            time.sleep(5)
 
-        # Нажимаем кнопку входа
-        print("🖱️ Нажимаем кнопку входа...")
-        driver.execute_script("arguments[0].click();", login_button)
-        time.sleep(3)
-
-        # Ждем появления формы входа
-        print("⏳ Ждем появления формы входа...")
-        time.sleep(3)
+        # Теперь ищем форму входа
+        print("🔍 Ищем поля формы входа...")
 
         # Селекторы для поля логина/почты
         username_selectors = [
             "input[name='fields.login.user']",
             "input[placeholder*='Логин/почта']",
-            "input[autocomplete='username']",
-            "input[name='username']",
-            "input[name='email']"
+            "input[autocomplete='username']"
         ]
 
         username_field = None
@@ -193,7 +178,7 @@ def login_to_remanga(driver):
                 continue
 
         if not username_field:
-            print("❌ Не найдено поле для ввода логина после открытия формы")
+            print("❌ Не найдено поле для ввода логина")
             return False
 
         # Вводим логин
@@ -207,8 +192,7 @@ def login_to_remanga(driver):
             "input[name='fields.login.password']",
             "input[type='password']",
             "input[placeholder*='Пароль']",
-            "input[autocomplete='current-password']",
-            "input[name='password']"
+            "input[autocomplete='current-password']"
         ]
 
         password_field = None
@@ -236,9 +220,7 @@ def login_to_remanga(driver):
         # Ищем кнопку отправки формы
         submit_selectors = [
             "button[type='submit']",
-            "button:contains('Войти')",
-            "button.cs-button[type='submit']",
-            "button[data-slot='button'][type='submit']"
+            "button:contains('Войти')"
         ]
 
         submit_button = None
@@ -277,29 +259,6 @@ def login_to_remanga(driver):
         page_source = driver.page_source.lower()
         if "signin" not in current_url and "login" not in current_url and "вход" not in page_source:
             print("✅ Успешно вошли в систему")
-
-            # Дополнительная проверка: ищем элементы профиля
-            time.sleep(2)
-            profile_indicators = [
-                "div[class*='profile']",
-                "a[href*='profile']",
-                ".user-avatar",
-                "[data-testid='user-menu']",
-                "img[alt*='avatar']",
-                ".user-menu",
-                ".account-menu"
-            ]
-
-            for indicator in profile_indicators:
-                try:
-                    profile_element = driver.find_element(By.CSS_SELECTOR, indicator)
-                    if profile_element.is_displayed():
-                        print(f"✅ Найден элемент профиля: {indicator}")
-                        return True
-                except:
-                    continue
-
-            # Если не нашли явных индикаторов, но и не на странице входа - считаем успешным
             return True
         else:
             # Проверяем наличие сообщений об ошибке
