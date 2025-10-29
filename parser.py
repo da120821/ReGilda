@@ -243,67 +243,90 @@ def extract_guild_name_from_url(url):
 
 
 def load_cookies(driver):
-    """Загружает куки в браузер"""
+    """Загружает куки в браузер через JavaScript"""
     try:
-        cookies = None
         cookies_json = os.getenv('COOKIES_JSON')
-
-        if cookies_json:
-            cookies = json.loads(cookies_json)
-            print("✅ Куки загружены из переменных окружения")
-        else:
-            print("❌ Куки не найдены в переменных окружения")
+        if not cookies_json:
+            print("❌ COOKIES_JSON не найден")
             return False
 
-        # ПЕРЕХОДИМ НА ПРАВИЛЬНЫЙ ДОМЕН С WWW
-        print("Переходим на домен www.remanga.org для установки кук...")
-        driver.get("https://www.remanga.org")  # ← ДОБАВЬТЕ WWW!
-        time.sleep(3)
+        cookies = json.loads(cookies_json)
+        print(f"✅ Загружено {len(cookies)} куков из переменных окружения")
 
-        # Удаляем существующие куки
-        driver.delete_all_cookies()
+        # Переходим сразу на целевую страницу
+        current_url = driver.current_url
+        if "remanga.org" not in current_url:
+            print("🔄 Переходим на remanga.org...")
+            driver.get("https://remanga.org")
+            time.sleep(3)
 
+        # Устанавливаем куки через JavaScript
         cookies_added = 0
         for cookie in cookies:
             try:
-                # Используем оригинальный домен С ТОЧКОЙ
-                cookie_copy = {
-                    'name': cookie['name'],
-                    'value': cookie['value'],
-                    'domain': cookie['domain'],  # ".remanga.org"
-                    'path': cookie['path'],
-                    'secure': cookie.get('secure', False),
-                    'httpOnly': cookie.get('httpOnly', False)
-                }
+                # Формируем строку куки для document.cookie
+                cookie_parts = [
+                    f"{cookie['name']}={cookie['value']}",
+                    f"path={cookie.get('path', '/')}",
+                    f"domain={cookie.get('domain', '.remanga.org')}"
+                ]
 
-                if 'expiry' in cookie:
-                    cookie_copy['expiry'] = cookie['expiry']
-                if 'sameSite' in cookie:
-                    cookie_copy['sameSite'] = cookie['sameSite']
+                if cookie.get('secure', False):
+                    cookie_parts.append("secure")
+                if cookie.get('sameSite'):
+                    cookie_parts.append(f"samesite={cookie['sameSite']}")
 
-                print(f"🔄 Добавляем куки: {cookie['name']} для домена {cookie['domain']}")
+                cookie_str = "; ".join(cookie_parts)
 
-                driver.add_cookie(cookie_copy)
+                # Устанавливаем через JavaScript
+                js_code = f"""
+                document.cookie = "{cookie_str}";
+                console.log("Установлен куки: {cookie['name']}");
+                """
+                driver.execute_script(js_code)
                 cookies_added += 1
-                print(f"✅ Успешно добавлен: {cookie['name']}")
+                print(f"✅ Куки {cookie['name']} установлен через JS")
 
             except Exception as e:
-                print(f"❌ Ошибка добавления куки {cookie.get('name')}: {str(e)[:100]}...")
-                continue
+                print(f"❌ Ошибка установки куки {cookie['name']}: {e}")
 
-        print(f"✅ Успешно добавлено {cookies_added} куков")
+        print(f"✅ Установлено {cookies_added} куков через JavaScript")
 
-        # ПРОВЕРЯЕМ куки
-        current_cookies = driver.get_cookies()
-        print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
+        # Перезагружаем страницу чтобы куки применились
+        print("🔄 Перезагружаем страницу для применения кук...")
+        driver.refresh()
+        time.sleep(5)
 
-        for c in current_cookies[:5]:  # Показываем первые 5
-            print(f"   - {c['name']} (домен: {c.get('domain', 'нет')})")
+        # Проверяем авторизацию
+        try:
+            # Ищем элементы которые видны только авторизованным пользователям
+            auth_indicators = [
+                "button[class*='logout']",
+                "div[class*='user']",
+                "img[class*='avatar']",
+                "a[href*='/user/']"
+            ]
 
-        return cookies_added > 0
+            for selector in auth_indicators:
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    print(f"🎉 Авторизация успешна! Найден элемент: {selector}")
+                    return True
+
+        except Exception as e:
+            print(f"⚠️ Не удалось проверить авторизацию: {e}")
+
+        # Дополнительная проверка - смотрим на title или URL
+        current_url = driver.current_url
+        if "login" not in current_url and "auth" not in current_url:
+            print("🔐 Похоже авторизация прошла успешно (нет редиректа на логин)")
+            return True
+        else:
+            print("❌ Авторизация не удалась - редирект на страницу входа")
+            return False
 
     except Exception as e:
-        print(f"❌ Ошибка загрузки куки: {e}")
+        print(f"❌ Ошибка загрузки кук: {e}")
         return False
 
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
