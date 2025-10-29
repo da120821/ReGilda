@@ -243,7 +243,7 @@ def extract_guild_name_from_url(url):
 
 
 def load_cookies(driver):
-    """Загружает куки в браузер"""
+    """Загружает куки в браузер БЕЗ указания домена"""
     try:
         cookies_json = os.getenv('COOKIES_JSON')
         if not cookies_json:
@@ -253,8 +253,8 @@ def load_cookies(driver):
         cookies = json.loads(cookies_json)
         print(f"✅ Загружено {len(cookies)} куков из переменных окружения")
 
-        # Переходим на ОСНОВНОЙ домен remanga.org (без www)
-        print("🔄 Переходим на remanga.org...")
+        # Переходим на домен БЕЗ www
+        print("🔄 Переходим на https://remanga.org...")
         driver.get("https://remanga.org")
         time.sleep(3)
 
@@ -264,34 +264,42 @@ def load_cookies(driver):
         cookies_added = 0
         for cookie in cookies:
             try:
-                # Создаем упрощенный куки БЕЗ указания домена
+                # СОЗДАЕМ КУКИ БЕЗ ДОМЕНА ВООБЩЕ
                 cookie_data = {
                     'name': cookie['name'],
                     'value': cookie['value'],
                     'path': cookie.get('path', '/'),
-                    'secure': cookie.get('secure', True),
-                    'httpOnly': cookie.get('httpOnly', False)
+                    'secure': cookie.get('secure', True)
                 }
 
                 # Добавляем expiry если есть
                 if 'expiry' in cookie:
                     cookie_data['expiry'] = cookie['expiry']
 
-                # НЕ добавляем domain - браузер сам подставит текущий
+                # НЕ добавляем domain вообще!
+                # НЕ добавляем sameSite (может вызывать проблемы)
+                # НЕ добавляем httpOnly (может вызывать проблемы)
+
                 driver.add_cookie(cookie_data)
                 cookies_added += 1
                 print(f"✅ Куки {cookie['name']} добавлен (без домена)")
 
             except Exception as e:
                 print(f"❌ Ошибка добавления куки {cookie['name']}: {e}")
-                continue
+
+                # Пробуем максимально упрощенный вариант
+                try:
+                    driver.add_cookie({
+                        'name': cookie['name'],
+                        'value': cookie['value'],
+                        'path': '/'
+                    })
+                    cookies_added += 1
+                    print(f"✅ Куки {cookie['name']} добавлен (упрощенный)")
+                except Exception as e2:
+                    print(f"❌ Не удалось добавить даже упрощенно: {e2}")
 
         print(f"✅ Успешно добавлено {cookies_added} куков")
-
-        # Перезагружаем страницу
-        print("🔄 Перезагружаем страницу...")
-        driver.refresh()
-        time.sleep(5)
 
         # Проверяем куки
         current_cookies = driver.get_cookies()
