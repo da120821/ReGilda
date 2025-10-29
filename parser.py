@@ -234,6 +234,11 @@ def extract_guild_name_from_url(url):
         return "Неизвестная гильдия"
 
 
+def replace_remanga_domain(url):
+    """Заменяет домен remanga.org на реманга.орг"""
+    return url.replace('remanga.org', 'реманга.орг')
+
+
 def load_cookies(driver):
     """Загружает куки в браузер"""
     try:
@@ -253,7 +258,7 @@ def load_cookies(driver):
 
         # Сначала переходим на домен, чтобы установить куки
         print("Переходим на домен для установки кук...")
-        driver.get("https://remanga.org")
+        driver.get("https://реманга.орг")
         time.sleep(3)
 
         # Удаляем существующие куки и добавляем новые
@@ -268,10 +273,13 @@ def load_cookies(driver):
 
                 # Убеждаемся, что домен правильный
                 if 'domain' in cookie_copy:
-                    if cookie_copy['domain'].startswith('.'):
+                    # Заменяем домен на кириллический
+                    if 'remanga.org' in cookie_copy['domain']:
+                        cookie_copy['domain'] = cookie_copy['domain'].replace('remanga.org', 'реманга.орг')
+                    elif cookie_copy['domain'].startswith('.'):
                         cookie_copy['domain'] = cookie_copy['domain'][1:]
-                    # Убеждаемся, что домен соответствует remanga.org
-                    if 'remanga.org' not in cookie_copy['domain']:
+                    # Убеждаемся, что домен соответствует реманга.орг
+                    if 'реманга.орг' not in cookie_copy['domain']:
                         continue
 
                 driver.add_cookie(cookie_copy)
@@ -292,10 +300,12 @@ def load_cookies(driver):
         return False
 
 
-def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
+def parse_table(url='https://реманга.орг/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
     Парсит виртуализированную таблицу бустов через Selenium
     """
+    # Заменяем домен в URL на кириллический
+    url = replace_remanga_domain(url)
     print(f"🎯 Парсим URL: {url}")
 
     # Сначала проверяем подключение
@@ -336,7 +346,7 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         current_url = driver.current_url
         print(f"📄 Текущий URL: {current_url}")
 
-        if "remanga.org" not in current_url and "реманга.орг" not in current_url:
+        if "реманга.орг" not in current_url and "remanga.org" not in current_url:
             print(f"❌ Не удалось загрузить целевую страницу. Текущий URL: {current_url}")
             return pd.DataFrame()
 
