@@ -120,129 +120,79 @@ def login_to_remanga(driver):
         # Переходим на главную страницу
         main_url = "https://remanga.org"
         driver.get(main_url)
+        time.sleep(5)
 
-        # ЖДЕМ ПОЛНОЙ ЗАГРУЗКИ СТРАНИЦЫ
-        print("⏳ Ожидаем полной загрузки страницы...")
+        print("🔍 Ищем кнопку 'Вход/Регистрация'...")
 
-        # После перехода на страницу добавьте:
-        print("=== ДЕТАЛЬНАЯ ОТЛАДКА СТРАНИЦЫ ===")
-        print(f"📄 Заголовок: {driver.title}")
-        print(f"🌐 URL: {driver.current_url}")
-
-        # Проверим текст на странице
-        page_text = driver.page_source[:2000]  # Первые 2000 символов
-        print(f"📝 Начало страницы: {page_text}")
-
-        # Проверим есть ли элементы с текстом об ошибке
-        error_indicators = ["доступ запрещен", "access denied", "войдите", "sign in", "login"]
-        page_lower = page_text.lower()
-        for indicator in error_indicators:
-            if indicator in page_lower:
-                print(f"🚫 Найдено: '{indicator}' - требуется авторизация")
-
-        print("=== КОНЕЦ ОТЛАДКИ ===")
-
-        # Ожидаем загрузки DOM
-        WebDriverWait(driver, 15).until(
-            lambda driver: driver.execute_script("return document.readyState") == "complete"
-        )
-        print("✅ DOM полностью загружен")
-
-        # Дополнительная задержка для динамического контента
-        time.sleep(3)
-
-        # ОЖИДАЕМ появления кнопки
-        print("🔍 Ожидаем появления кнопки 'Вход/Регистрация'...")
-
+        # ПРОСТОЙ И НАДЕЖНЫЙ СПОСОБ - JavaScript клик
         try:
-            # Явно ждем появления кнопки
-            login_button = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"))
-            )
-            print("✅ Кнопка найдена после ожидания")
+            # Используем JavaScript чтобы найти и кликнуть кнопку
+            result = driver.execute_script("""
+                // Ищем кнопку по селектору
+                var button = document.querySelector("button[data-sentry-component='UserAuthButtonMenuItem']");
+                if (button) {
+                    button.click();
+                    console.log('✅ Кликнули по кнопке Вход/Регистрация');
+                    return true;
+                } else {
+                    console.log('❌ Кнопка не найдена');
+                    return false;
+                }
+            """)
 
-            # Ждем пока кнопка станет кликабельной
-            login_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"))
-            )
-            print("✅ Кнопка кликабельна")
-
-        except Exception as e:
-            print(f"❌ Кнопка не появилась за 10 секунд: {e}")
-            print("🔄 Пробуем альтернативный поиск...")
-
-            # Альтернативный поиск с ожиданием
-            try:
-                login_button = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]"))
-                )
-                print("✅ Нашли кнопку по тексту")
-            except:
-                print("❌ Кнопка не найдена даже по тексту")
+            if result:
+                print("✅ Успешно кликнули по кнопке 'Вход/Регистрация' через JavaScript")
+            else:
+                print("❌ Кнопка не найдена через JavaScript")
                 return False
 
-        # КЛИКАЕМ
-        print("🖱️ Кликаем по кнопке...")
-        try:
-            driver.execute_script("arguments[0].click();", login_button)
-            print("✅ Успешно кликнули через JavaScript")
         except Exception as e:
-            print(f"❌ Ошибка клика: {e}")
+            print(f"❌ Ошибка при клике через JavaScript: {e}")
             return False
 
-        # ЖДЕМ открытия формы входа
-        print("⏳ Ожидаем открытия формы входа...")
+        # Ждем открытия формы входа
+        print("⏳ Ждем открытия формы входа...")
         time.sleep(3)
 
-        # ОЖИДАЕМ появления полей формы
-        print("🔍 Ожидаем появления полей формы...")
+        # Заполняем форму входа
+        print("🔍 Ищем поля формы входа...")
 
+        # Поле логина
         try:
-            username_field = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='fields.login.user']"))
-            )
-            print("✅ Поле логина найдено")
+            username_field = driver.find_element(By.CSS_SELECTOR, "input[name='fields.login.user']")
+            username_field.clear()
+            username_field.send_keys(username)
+            print("✅ Ввели логин")
+            time.sleep(1)
         except:
-            print("❌ Поле логина не найдено")
+            print("❌ Не найдено поле логина")
             return False
 
+        # Поле пароля
         try:
-            password_field = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='fields.login.password']"))
-            )
-            print("✅ Поле пароля найдено")
+            password_field = driver.find_element(By.CSS_SELECTOR, "input[name='fields.login.password']")
+            password_field.clear()
+            password_field.send_keys(password)
+            print("✅ Ввели пароль")
+            time.sleep(1)
         except:
-            print("❌ Поле пароля не найдено")
+            print("❌ Не найдено поле пароля")
             return False
 
-        # ЗАПОЛНЯЕМ ФОРМУ
-        username_field.clear()
-        username_field.send_keys(username)
-        print("✅ Ввели логин")
-        time.sleep(1)
-
-        password_field.clear()
-        password_field.send_keys(password)
-        print("✅ Ввели пароль")
-        time.sleep(1)
-
-        # КЛИК по кнопке Войти
+        # Клик по кнопке "Войти"
         try:
-            submit_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Войти')]"))
-            )
+            submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Войти')]")
             driver.execute_script("arguments[0].click();", submit_button)
-            print("✅ Кликнули 'Войти'")
+            print("✅ Кликнули по кнопке 'Войти'")
         except:
-            print("⌨️ Отправляем форму Enter...")
+            print("⌨️ Отправляем форму нажатием Enter...")
             password_field.send_keys(Keys.RETURN)
 
-        # ОЖИДАЕМ завершения входа
+        # Ждем завершения входа
         print("⏳ Ожидаем завершения входа...")
         time.sleep(5)
 
-        # ПРОВЕРЯЕМ успешность входа
+        # Проверяем успешность входа
         current_url = driver.current_url
         print(f"📄 Текущий URL: {current_url}")
 
@@ -254,7 +204,7 @@ def login_to_remanga(driver):
             return False
 
     except Exception as e:
-        print(f"❌ Критическая ошибка: {e}")
+        print(f"❌ Ошибка при входе в систему: {e}")
         import traceback
         traceback.print_exc()
         return False
