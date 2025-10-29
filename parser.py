@@ -128,27 +128,18 @@ def login_to_remanga(driver):
 
         print("🔍 Ищем кнопку 'Вход/Регистрация'...")
 
-        # Селекторы для кнопки входа/регистрации
+        # Точный селектор для кнопки "Вход/Регистрация"
         login_button_selectors = [
-            "button:contains('Вход')",
-            "button:contains('Войти')",
-            "button:contains('Регистрация')",
-            "a:contains('Вход')",
-            "a:contains('Войти')",
-            "a:contains('Регистрация')",
-            ".login-button",
-            ".auth-button",
-            "[data-testid='login-button']",
-            "button.auth-btn",
-            "a.auth-link"
+            "button[data-sentry-component='UserAuthButtonMenuItem']",
+            "button:contains('Вход/Регистрация')",
+            ".cs-button[data-sentry-component='UserAuthButtonMenuItem']"
         ]
 
         login_button = None
         for selector in login_button_selectors:
             try:
                 if "contains" in selector:
-                    text = re.search(r":contains\('([^']+)'\)", selector).group(1)
-                    login_button = driver.find_element(By.XPATH, f"//*[contains(text(), '{text}')]")
+                    login_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]")
                 else:
                     login_button = driver.find_element(By.CSS_SELECTOR, selector)
 
@@ -162,7 +153,14 @@ def login_to_remanga(driver):
 
         if not login_button:
             print("❌ Не найдена кнопка 'Вход/Регистрация'")
-            return False
+            # Попробуем найти другие кнопки входа
+            alternative_buttons = driver.find_elements(By.XPATH,
+                                                       "//button[contains(text(), 'Вход') or contains(text(), 'Войти')]")
+            if alternative_buttons:
+                login_button = alternative_buttons[0]
+                print(f"✅ Найдена альтернативная кнопка: {login_button.text}")
+            else:
+                return False
 
         # Нажимаем кнопку входа
         print("🖱️ Нажимаем кнопку входа...")
@@ -173,17 +171,13 @@ def login_to_remanga(driver):
         print("⏳ Ждем появления формы входа...")
         time.sleep(3)
 
-        # Теперь используем правильные селекторы из HTML структуры
-        print("🔍 Ищем поля формы входа...")
-
         # Селекторы для поля логина/почты
         username_selectors = [
             "input[name='fields.login.user']",
             "input[placeholder*='Логин/почта']",
             "input[autocomplete='username']",
             "input[name='username']",
-            "input[name='email']",
-            "input[type='text']"
+            "input[name='email']"
         ]
 
         username_field = None
@@ -199,15 +193,7 @@ def login_to_remanga(driver):
                 continue
 
         if not username_field:
-            print("❌ Не найдено поле для ввода логина")
-            # Покажем все input элементы на странице для отладки
-            all_inputs = driver.find_elements(By.TAG_NAME, 'input')
-            print(f"📝 Все input элементы на странице ({len(all_inputs)}):")
-            for i, input_elem in enumerate(all_inputs):
-                input_type = input_elem.get_attribute('type')
-                input_name = input_elem.get_attribute('name')
-                input_placeholder = input_elem.get_attribute('placeholder')
-                print(f"  Input {i + 1}: type='{input_type}', name='{input_name}', placeholder='{input_placeholder}'")
+            print("❌ Не найдено поле для ввода логина после открытия формы")
             return False
 
         # Вводим логин
@@ -247,12 +233,12 @@ def login_to_remanga(driver):
         print("✅ Ввели пароль")
         time.sleep(1)
 
-        # Ищем кнопку отправки формы - используем правильный селектор из HTML
+        # Ищем кнопку отправки формы
         submit_selectors = [
             "button[type='submit']",
             "button:contains('Войти')",
             "button.cs-button[type='submit']",
-            "button[data-slot='button']"
+            "button[data-slot='button'][type='submit']"
         ]
 
         submit_button = None
