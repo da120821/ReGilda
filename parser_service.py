@@ -68,7 +68,7 @@ if __name__ == '__main__':
 
     # Настраиваем расписание
     print("⏰ Настраиваем расписание...")
-    schedule.every(1).second.do(scheduled_parsing) # для теста 1 по стандарту 10
+    schedule.every(1).minute.do(scheduled_parsing) # для теста 1 по стандарту 10
 
     print(f"\n🚀 Сервис парсинга запущен!")
     print(f"📊 Мониторим {len(GUILD_URLS)} гильдий")
@@ -79,6 +79,6 @@ if __name__ == '__main__':
     try:
         while True:
             schedule.run_pending()
-            time.sleep(1)
+            time.sleep(60)
     except KeyboardInterrupt:
         print("\n⏹️ Сервис парсинга остановлен")
