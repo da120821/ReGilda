@@ -259,32 +259,44 @@ def load_cookies(driver):
             print("❌ Куки не найдены ни в переменных окружения, ни в файле")
             return False
 
-        # Сначала переходим на домен, чтобы установить куки
-        print("Переходим на домен для установки кук...")
+        # Сначала переходим на ТОЧНЫЙ домен, чтобы установить куки
+        print("Переходим на точный домен для установки кук...")
         driver.get("https://remanga.org")
         time.sleep(3)
 
-        # Удаляем существующие куки и добавляем новые
+        # Удаляем существующие куки
         driver.delete_all_cookies()
 
         cookies_added = 0
         for cookie in cookies:
             try:
-                # Убираем лишние поля которые могут мешать
-                cookie_copy = {k: v for k, v in cookie.items()
-                               if k in ['name', 'value', 'domain', 'path', 'expiry', 'secure', 'httpOnly', 'sameSite']}
+                # Создаем копию куки только с нужными полями
+                cookie_copy = {
+                    'name': cookie.get('name'),
+                    'value': cookie.get('value'),
+                    'path': cookie.get('path', '/')
+                }
 
-                # Обрабатываем домен - убираем точку в начале
-                if 'domain' in cookie_copy:
-                    domain = cookie_copy['domain']
-                    if domain.startswith('.'):
-                        cookie_copy['domain'] = domain[1:]  # Убираем точку
-                        print(f"🔄 Исправлен домен: {domain} -> {cookie_copy['domain']}")
+                # Для secure кук НЕ указываем домен вообще
+                if cookie.get('secure'):
+                    print(f"🔒 Secure куки {cookie['name']} - добавляем без домена")
+                else:
+                    # Для не-secure кук обрабатываем домен
+                    domain = cookie.get('domain', '')
+                    if domain and domain.startswith('.'):
+                        domain = domain[1:]  # Убираем точку
+                    if domain and 'remanga.org' in domain:
+                        cookie_copy['domain'] = domain
 
-                # Убеждаемся, что домен соответствует remanga.org
-                if 'domain' in cookie_copy and 'remanga.org' not in cookie_copy['domain']:
-                    print(f"⚠️ Пропускаем куки с неправильным доменом: {cookie_copy['domain']}")
-                    continue
+                # Добавляем остальные поля если они есть
+                if cookie.get('expiry'):
+                    cookie_copy['expiry'] = cookie.get('expiry')
+                if cookie.get('httpOnly'):
+                    cookie_copy['httpOnly'] = cookie.get('httpOnly')
+                if cookie.get('secure'):
+                    cookie_copy['secure'] = cookie.get('secure')
+                if cookie.get('sameSite'):
+                    cookie_copy['sameSite'] = cookie.get('sameSite')
 
                 # Добавляем куки
                 driver.add_cookie(cookie_copy)
@@ -293,9 +305,25 @@ def load_cookies(driver):
 
             except Exception as e:
                 print(f"⚠️ Ошибка добавления куки {cookie.get('name')}: {e}")
-                continue
+                # Пробуем упрощенный вариант без домена
+                try:
+                    simplified_cookie = {
+                        'name': cookie.get('name'),
+                        'value': cookie.get('value'),
+                        'path': cookie.get('path', '/')
+                    }
+                    driver.add_cookie(simplified_cookie)
+                    cookies_added += 1
+                    print(f"✅ Куки {cookie['name']} добавлен в упрощенном формате")
+                except Exception as e2:
+                    print(f"❌ Не удалось добавить куки {cookie['name']} даже в упрощенном формате: {e2}")
 
         print(f"✅ Успешно добавлено {cookies_added} куков")
+
+        # Обновляем страницу чтобы применились куки
+        print("🔄 Обновляем страницу для применения кук...")
+        driver.refresh()
+        time.sleep(3)
 
         # Проверяем куки
         current_cookies = driver.get_cookies()
@@ -303,7 +331,7 @@ def load_cookies(driver):
 
         # Выводим список добавленных куков для отладки
         for cookie in current_cookies:
-            print(f"   - {cookie['name']}: {cookie['domain']}")
+            print(f"   - {cookie['name']}: {cookie.get('domain', 'no domain')}")
 
         return True
 
