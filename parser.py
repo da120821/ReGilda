@@ -243,7 +243,7 @@ def extract_guild_name_from_url(url):
 
 
 def load_cookies(driver):
-    """Загружает куки в браузер через JavaScript"""
+    """Загружает куки в браузер"""
     try:
         cookies_json = os.getenv('COOKIES_JSON')
         if not cookies_json:
@@ -253,77 +253,54 @@ def load_cookies(driver):
         cookies = json.loads(cookies_json)
         print(f"✅ Загружено {len(cookies)} куков из переменных окружения")
 
-        # Переходим сразу на целевую страницу
-        current_url = driver.current_url
-        if "remanga.org" not in current_url:
-            print("🔄 Переходим на remanga.org...")
-            driver.get("https://remanga.org")
-            time.sleep(3)
+        # Переходим на ОСНОВНОЙ домен remanga.org (без www)
+        print("🔄 Переходим на remanga.org...")
+        driver.get("https://remanga.org")
+        time.sleep(3)
 
-        # Устанавливаем куки через JavaScript
+        # Удаляем старые куки
+        driver.delete_all_cookies()
+
         cookies_added = 0
         for cookie in cookies:
             try:
-                # Формируем строку куки для document.cookie
-                cookie_parts = [
-                    f"{cookie['name']}={cookie['value']}",
-                    f"path={cookie.get('path', '/')}",
-                    f"domain={cookie.get('domain', '.remanga.org')}"
-                ]
+                # Создаем упрощенный куки БЕЗ указания домена
+                cookie_data = {
+                    'name': cookie['name'],
+                    'value': cookie['value'],
+                    'path': cookie.get('path', '/'),
+                    'secure': cookie.get('secure', True),
+                    'httpOnly': cookie.get('httpOnly', False)
+                }
 
-                if cookie.get('secure', False):
-                    cookie_parts.append("secure")
-                if cookie.get('sameSite'):
-                    cookie_parts.append(f"samesite={cookie['sameSite']}")
+                # Добавляем expiry если есть
+                if 'expiry' in cookie:
+                    cookie_data['expiry'] = cookie['expiry']
 
-                cookie_str = "; ".join(cookie_parts)
-
-                # Устанавливаем через JavaScript
-                js_code = f"""
-                document.cookie = "{cookie_str}";
-                console.log("Установлен куки: {cookie['name']}");
-                """
-                driver.execute_script(js_code)
+                # НЕ добавляем domain - браузер сам подставит текущий
+                driver.add_cookie(cookie_data)
                 cookies_added += 1
-                print(f"✅ Куки {cookie['name']} установлен через JS")
+                print(f"✅ Куки {cookie['name']} добавлен (без домена)")
 
             except Exception as e:
-                print(f"❌ Ошибка установки куки {cookie['name']}: {e}")
+                print(f"❌ Ошибка добавления куки {cookie['name']}: {e}")
+                continue
 
-        print(f"✅ Установлено {cookies_added} куков через JavaScript")
+        print(f"✅ Успешно добавлено {cookies_added} куков")
 
-        # Перезагружаем страницу чтобы куки применились
-        print("🔄 Перезагружаем страницу для применения кук...")
+        # Перезагружаем страницу
+        print("🔄 Перезагружаем страницу...")
         driver.refresh()
         time.sleep(5)
 
-        # Проверяем авторизацию
-        try:
-            # Ищем элементы которые видны только авторизованным пользователям
-            auth_indicators = [
-                "button[class*='logout']",
-                "div[class*='user']",
-                "img[class*='avatar']",
-                "a[href*='/user/']"
-            ]
+        # Проверяем куки
+        current_cookies = driver.get_cookies()
+        print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
 
-            for selector in auth_indicators:
-                elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements:
-                    print(f"🎉 Авторизация успешна! Найден элемент: {selector}")
-                    return True
+        for c in current_cookies:
+            print(f"   - {c['name']}")
 
-        except Exception as e:
-            print(f"⚠️ Не удалось проверить авторизацию: {e}")
-
-        # Дополнительная проверка - смотрим на title или URL
-        current_url = driver.current_url
-        if "login" not in current_url and "auth" not in current_url:
-            print("🔐 Похоже авторизация прошла успешно (нет редиректа на логин)")
-            return True
-        else:
-            print("❌ Авторизация не удалась - редирект на страницу входа")
-            return False
+        return cookies_added > 0
 
     except Exception as e:
         print(f"❌ Ошибка загрузки кук: {e}")
