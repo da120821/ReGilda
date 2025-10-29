@@ -18,10 +18,10 @@ cookies_file = 'cookies.json'
 
 
 def setup_driver():
-    """Настраивает Selenium драйвер для standalone Chrome на Railway"""
+    """Настраивает Selenium драйвер для standalone Chrome на Railway с прокси для РФ"""
     chrome_options = Options()
 
-    # Аргументы для Chrome в production среде
+    # Аргументы для Railway
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -39,6 +39,14 @@ def setup_driver():
     # Дополнительные опции для стабильности
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
+
+    # Прокси для доступа к РФ сайтам
+    proxy_url = os.getenv('RUSSIAN_PROXY_URL')
+    if proxy_url:
+        chrome_options.add_argument(f'--proxy-server={proxy_url}')
+        print(f"🔗 Используем прокси для РФ: {proxy_url}")
+    else:
+        print("⚠️ Прокси для РФ не настроен, используем прямое подключение")
 
     try:
         # Получаем URL standalone Chrome сервиса из переменных окружения
@@ -234,11 +242,6 @@ def extract_guild_name_from_url(url):
         return "Неизвестная гильдия"
 
 
-def replace_remanga_domain(url):
-    """Заменяет домен remanga.org на реманга.орг"""
-    return url.replace('remanga.org', 'реманга.орг')
-
-
 def load_cookies(driver):
     """Загружает куки в браузер"""
     try:
@@ -258,7 +261,7 @@ def load_cookies(driver):
 
         # Сначала переходим на домен, чтобы установить куки
         print("Переходим на домен для установки кук...")
-        driver.get("https://реманга.орг")
+        driver.get("https://remanga.org")
         time.sleep(3)
 
         # Удаляем существующие куки и добавляем новые
@@ -273,13 +276,10 @@ def load_cookies(driver):
 
                 # Убеждаемся, что домен правильный
                 if 'domain' in cookie_copy:
-                    # Заменяем домен на кириллический
-                    if 'remanga.org' in cookie_copy['domain']:
-                        cookie_copy['domain'] = cookie_copy['domain'].replace('remanga.org', 'реманга.орг')
-                    elif cookie_copy['domain'].startswith('.'):
+                    if cookie_copy['domain'].startswith('.'):
                         cookie_copy['domain'] = cookie_copy['domain'][1:]
-                    # Убеждаемся, что домен соответствует реманга.орг
-                    if 'реманга.орг' not in cookie_copy['domain']:
+                    # Убеждаемся, что домен соответствует remanga.org
+                    if 'remanga.org' not in cookie_copy['domain']:
                         continue
 
                 driver.add_cookie(cookie_copy)
@@ -300,12 +300,10 @@ def load_cookies(driver):
         return False
 
 
-def parse_table(url='https://реманга.орг/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
+def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
     Парсит виртуализированную таблицу бустов через Selenium
     """
-    # Заменяем домен в URL на кириллический
-    url = replace_remanga_domain(url)
     print(f"🎯 Парсим URL: {url}")
 
     # Сначала проверяем подключение
@@ -346,7 +344,7 @@ def parse_table(url='https://реманга.орг/guild/i-g-g-d-r-a-s-i-l--a117
         current_url = driver.current_url
         print(f"📄 Текущий URL: {current_url}")
 
-        if "реманга.орг" not in current_url and "remanga.org" not in current_url:
+        if "remanga.org" not in current_url and "реманга.орг" not in current_url:
             print(f"❌ Не удалось загрузить целевую страницу. Текущий URL: {current_url}")
             return pd.DataFrame()
 
