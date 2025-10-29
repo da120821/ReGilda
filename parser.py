@@ -3,6 +3,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
 import time
 import json
@@ -14,11 +15,9 @@ from dotenv import load_dotenv
 # Загружаем переменные из .env файла
 load_dotenv()
 
-cookies_file = 'cookies.json'
-
 
 def setup_driver():
-    """Настраивает Selenium драйвер для standalone Chrome на Railway с прокси для РФ"""
+    """Настраивает Selenium драйвер для standalone Chrome на Railway"""
     chrome_options = Options()
 
     # Аргументы для Railway
@@ -40,13 +39,11 @@ def setup_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
 
-    # Прокси для доступа к РФ сайтам
+    # Прокси для доступа к РФ сайтам (опционально)
     proxy_url = os.getenv('RUSSIAN_PROXY_URL')
     if proxy_url:
         chrome_options.add_argument(f'--proxy-server={proxy_url}')
         print(f"🔗 Используем прокси для РФ: {proxy_url}")
-    else:
-        print("⚠️ Прокси для РФ не настроен, используем прямое подключение")
 
     try:
         # Получаем URL standalone Chrome сервиса из переменных окружения
@@ -108,17 +105,145 @@ def check_browserless_connection():
         return False
 
 
-def parse_table_for_service(url):
-    """Функция для сервиса парсинга"""
-    return parse_table(url)
+def login_to_remanga(driver):
+    """Выполняет вход на remanga.org с использованием логина и пароля"""
+    try:
+        # Получаем учетные данные из переменных окружения
+        username = os.getenv('REMANGALOGIN_USERNAME')
+        password = os.getenv('REMANGALOGIN_PASSWORD')
 
+        if not username or not password:
+            print("❌ Логин или пароль не настроены в переменных окружения")
+            return False
 
-def normalize_username(username):
-    """Убираем префикс U из имен пользователей"""
-    if username and username.startswith('U') and len(username) > 1:
-        if username[1].isupper():
-            return username[1:]
-    return username
+        print("🔐 Выполняем вход на remanga.org...")
+
+        # Переходим на страницу входа
+        login_url = "https://remanga.org/signin"
+        driver.get(login_url)
+        time.sleep(3)
+
+        # Ждем загрузки формы входа
+        wait = WebDriverWait(driver, 15)
+
+        # Пробуем разные селекторы для поля логина
+        username_selectors = [
+            "input[name='username']",
+            "input[name='email']",
+            "input[type='text']",
+            "input[placeholder*='логин']",
+            "input[placeholder*='email']",
+            "input[placeholder*='login']"
+        ]
+
+        username_field = None
+        for selector in username_selectors:
+            try:
+                username_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                break
+            except:
+                continue
+
+        if not username_field:
+            print("❌ Не найдено поле для ввода логина")
+            return False
+
+        username_field.clear()
+        username_field.send_keys(username)
+        print("✅ Ввели логин")
+
+        # Пробуем разные селекторы для поля пароля
+        password_selectors = [
+            "input[name='password']",
+            "input[type='password']",
+            "input[placeholder*='парол']"
+        ]
+
+        password_field = None
+        for selector in password_selectors:
+            try:
+                password_field = driver.find_element(By.CSS_SELECTOR, selector)
+                break
+            except:
+                continue
+
+        if not password_field:
+            print("❌ Не найдено поле для ввода пароля")
+            return False
+
+        password_field.clear()
+        password_field.send_keys(password)
+        print("✅ Ввели пароль")
+
+        # Пробуем разные селекторы для кнопки входа
+        login_button_selectors = [
+            "button[type='submit']",
+            "button.signin-form__button",
+            ".signin-form__button",
+            "button.btn-primary",
+            "input[type='submit']"
+        ]
+
+        login_button = None
+        for selector in login_button_selectors:
+            try:
+                login_button = driver.find_element(By.CSS_SELECTOR, selector)
+                if login_button.is_displayed() and login_button.is_enabled():
+                    break
+            except:
+                continue
+
+        if login_button:
+            login_button.click()
+            print("✅ Нажали кнопку входа")
+        else:
+            # Альтернатива: нажимаем Enter в поле пароля
+            password_field.send_keys(Keys.RETURN)
+            print("✅ Отправили форму нажатием Enter")
+
+        # Ждем завершения входа
+        time.sleep(5)
+
+        # Проверяем успешность входа
+        current_url = driver.current_url
+
+        # Если нас перенаправило с страницы входа - вероятно успешный вход
+        if "signin" not in current_url and "login" not in current_url:
+            print("✅ Успешно вошли в систему")
+
+            # Дополнительная проверка: ищем элементы профиля
+            time.sleep(2)
+            profile_indicators = [
+                "div[class*='profile']",
+                "a[href*='profile']",
+                ".user-avatar",
+                "[data-testid='user-menu']",
+                "img[alt*='avatar']"
+            ]
+
+            for indicator in profile_indicators:
+                try:
+                    profile_element = driver.find_element(By.CSS_SELECTOR, indicator)
+                    if profile_element.is_displayed():
+                        print("✅ Найден элемент профиля пользователя")
+                        return True
+                except:
+                    continue
+
+            # Если не нашли явных индикаторов, но и не на странице входа - считаем успешным
+            return True
+        else:
+            # Проверяем наличие сообщений об ошибке
+            page_source = driver.page_source.lower()
+            if "неверный логин или пароль" in page_source or "invalid login" in page_source:
+                print("❌ Неверный логин или пароль")
+            else:
+                print("❌ Не удалось войти в систему - остались на странице входа")
+            return False
+
+    except Exception as e:
+        print(f"❌ Ошибка при входе в систему: {e}")
+        return False
 
 
 def clean_text(text):
@@ -138,15 +263,22 @@ def extract_user_data(user_cell):
         if name_span:
             return clean_text(name_span.get_text())
 
-        # Альтернативный поиск
+        # Альтернативный поиск по классам
+        for class_name in ['font-medium', 'username', 'user-name']:
+            name_element = user_cell.find(class_=class_name)
+            if name_element:
+                return clean_text(name_element.get_text())
+
+        # Поиск по любому тексту
         name_elements = user_cell.find_all(text=True)
         for text in name_elements:
             cleaned = clean_text(text)
-            if cleaned and cleaned not in ['', 'Пользователь', 'User']:
+            if cleaned and cleaned not in ['', 'Пользователь', 'User', 'Неизвестный']:
                 return cleaned
 
         return "Неизвестный"
-    except:
+    except Exception as e:
+        print(f"Ошибка извлечения пользователя: {e}")
         return "Ошибка извлечения"
 
 
@@ -169,20 +301,37 @@ def extract_amount_data(amount_cell):
             amount_text = ''.join(text_parts).strip()
             return clean_text(amount_text)
 
+        # Альтернативный поиск
+        amount_elements = amount_cell.find_all(text=True)
+        for text in amount_elements:
+            cleaned = clean_text(text)
+            if cleaned and re.search(r'\d', cleaned):
+                return cleaned
+
         return "0"
-    except:
+    except Exception as e:
+        print(f"Ошибка извлечения суммы: {e}")
         return "0"
 
 
 def extract_date_data(date_cell):
     """Извлекает дату из ячейки"""
     try:
+        # Ищем span с датой
         date_span = date_cell.find('span', class_='text-muted-foreground')
         if date_span:
             return clean_text(date_span.get_text())
 
+        # Альтернативный поиск
+        date_elements = date_cell.find_all(text=True)
+        for text in date_elements:
+            cleaned = clean_text(text)
+            if cleaned and re.search(r'\d', cleaned):
+                return cleaned
+
         return "Неизвестная дата"
-    except:
+    except Exception as e:
+        print(f"Ошибка извлечения даты: {e}")
         return "Неизвестная дата"
 
 
@@ -211,8 +360,6 @@ def extract_guild_name_from_url(url):
         if match:
             guild_slug = match.group(1)
 
-            print(f"🔍 Извлекаем из URL: {guild_slug}")
-
             # Убираем уникальный ID в конце (например, --a1172e3f)
             guild_slug_clean = re.sub(r'--[a-f0-9]{8}$', '', guild_slug)
 
@@ -233,7 +380,7 @@ def extract_guild_name_from_url(url):
                 if all(len(word) == 1 for word in words):
                     guild_name = ''.join(words).capitalize()
 
-            print(f"✅ Преобразовано в: '{guild_name}'")
+            print(f"✅ Название гильдии: '{guild_name}'")
             return guild_name
 
         return "Неизвестная гильдия"
@@ -242,68 +389,11 @@ def extract_guild_name_from_url(url):
         return "Неизвестная гильдия"
 
 
-def load_cookies(driver):
-    """Загружает куки в браузер, игнорируя домен из JSON"""
-    try:
-        cookies_json = os.getenv('COOKIES_JSON')
-        if not cookies_json:
-            print("❌ COOKIES_JSON не найден")
-            return False
-
-        cookies = json.loads(cookies_json)
-        print(f"✅ Загружено {len(cookies)} куков из переменных окружения")
-
-        # Переходим на домен
-        print("🔄 Переходим на https://remanga.org...")
-        driver.get("https://remanga.org")
-        time.sleep(3)
-
-        # Удаляем старые куки
-        driver.delete_all_cookies()
-        print("🗑️ Удалены старые куки")
-
-        cookies_added = 0
-        for cookie in cookies:
-            try:
-                # Создаем ОЧЕНЬ простой куки только с основными полями
-                cookie_data = {
-                    'name': cookie['name'],
-                    'value': cookie['value'],
-                    'path': '/'
-                }
-
-                # НЕ добавляем domain, secure, httpOnly, sameSite - только самое необходимое
-
-                driver.add_cookie(cookie_data)
-                cookies_added += 1
-                print(f"✅ Куки {cookie['name']} добавлен")
-
-            except Exception as e:
-                print(f"❌ Ошибка добавления куки {cookie['name']}: {str(e)[:50]}...")
-                continue
-
-        print(f"✅ Успешно добавлено {cookies_added} куков")
-
-        # Проверяем куки
-        current_cookies = driver.get_cookies()
-        print(f"📊 Текущие куки в браузере: {len(current_cookies)}")
-
-        return cookies_added > 0
-
-    except Exception as e:
-        print(f"❌ Ошибка загрузки кук: {e}")
-        return False
-
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
     Парсит виртуализированную таблицу бустов через Selenium
     """
-    print(f"🎯 Парсим URL: {url}")
-
-    # Сначала проверяем подключение
-    if not check_browserless_connection():
-        print("❌ Selenium недоступен, пропускаем парсинг")
-        return pd.DataFrame()
+    print(f"🎯 Начинаем парсинг URL: {url}")
 
     # Настройка браузера через Selenium
     driver = setup_driver()
@@ -322,15 +412,15 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         # Получаем название гильдии
         guild_name = extract_guild_name_from_url(url)
 
-        # Загружаем куки ДО перехода на целевую страницу
-        print("Загружаем куки...")
-        cookies_loaded = load_cookies(driver)
+        # Выполняем вход в систему
+        print("🔐 Выполняем вход на remanga.org...")
+        login_success = login_to_remanga(driver)
 
-        if not cookies_loaded:
-            print("❌ Не удалось загрузить куки, продолжаем без них...")
+        if not login_success:
+            print("❌ Не удалось войти в систему, пробуем продолжить без авторизации...")
 
         # Открываем целевую страницу
-        print(f"Открываем страницу гильдии '{guild_name}'...")
+        print(f"📄 Открываем страницу гильдии '{guild_name}'...")
         driver.get(url)
         time.sleep(5)
 
@@ -338,29 +428,35 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
         current_url = driver.current_url
         print(f"📄 Текущий URL: {current_url}")
 
-        if "remanga.org" not in current_url and "реманга.орг" not in current_url:
+        if "remanga.org" not in current_url:
             print(f"❌ Не удалось загрузить целевую страницу. Текущий URL: {current_url}")
             return pd.DataFrame()
 
         # Проверяем, не перенаправило ли на страницу входа
-        if "login" in current_url or "signin" in current_url:
-            print("❌ Перенаправлено на страницу входа. Куки устарели.")
+        if "signin" in current_url or "login" in current_url:
+            print("❌ Перенаправлено на страницу входа. Авторизация не удалась.")
             return pd.DataFrame()
 
-        # Ждем загрузки виртуализированной таблицы
-        print("Ожидаем загрузки таблицы...")
+        # Проверяем доступ к странице
+        page_text = driver.page_source.lower()
+        if "доступ запрещен" in page_text or "access denied" in page_text or "недостаточно прав" in page_text:
+            print("❌ Недостаточно прав для доступа к странице")
+            return pd.DataFrame()
+
+        # Ждем загрузки таблицы
+        print("⏳ Ожидаем загрузки таблицы...")
         try:
             wait.until(EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "div[data-sentry-component*='Donations'], div[class*='table'], table")))
             print("✅ Таблица найдена")
         except Exception as e:
-            print(f"⚠️ Таблица не загрузилась: {e}")
+            print(f"⚠️ Таблица не загрузилась как ожидалось: {e}")
             # Продолжаем в надежде, что данные все равно есть
 
-        print("⏳ Ждем загрузку данных... (5 секунд)")
-        time.sleep(5)
+        print("⏳ Ждем загрузку данных...")
+        time.sleep(3)
 
-        print("Начинаем сбор данных с прокруткой...")
+        print("🔄 Начинаем сбор данных с прокруткой...")
 
         for attempt in range(max_scroll_attempts):
             # Получаем HTML
@@ -399,7 +495,7 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
                 # Фильтруем только видимые строки с данными
                 rows = [row for row in rows if row.find('td')]
 
-            print(f"Попытка {attempt + 1}: найдено {len(rows)} строк")
+            print(f"📊 Попытка {attempt + 1}: найдено {len(rows)} строк")
 
             # Обрабатываем строки
             new_rows_found = 0
@@ -430,16 +526,16 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
                         new_rows_found += 1
 
                 except Exception as e:
-                    print(f"Ошибка обработки строки: {e}")
+                    print(f"⚠️ Ошибка обработки строки: {e}")
                     continue
 
-            print(f"Собрано записей: {len(rows_data)} (новых: {new_rows_found})")
+            print(f"📈 Собрано записей: {len(rows_data)} (новых: {new_rows_found})")
 
             # Проверяем прогресс
             if len(rows_data) == previous_count:
                 no_new_count += 1
                 if no_new_count >= 3:
-                    print("Новых данных нет, завершаем...")
+                    print("🛑 Новых данных нет, завершаем...")
                     break
             else:
                 no_new_count = 0
@@ -460,22 +556,22 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
                     try:
                         element = driver.find_element(By.CSS_SELECTOR, selector)
                         driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", element)
-                        print(f"✅ Прокручен элемент: {selector}")
+                        print(f"⬇️  Прокручен элемент: {selector}")
                         break
                     except:
                         continue
                 else:
                     # Если не нашли специфичный элемент, прокручиваем страницу
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    print("✅ Прокручена вся страница")
+                    print("⬇️  Прокручена вся страница")
 
                 time.sleep(2)
 
             except Exception as e:
-                print(f"Ошибка прокрутки: {e}")
+                print(f"⚠️ Ошибка прокрутки: {e}")
 
-        print(f"\n=== ЗАВЕРШЕНО ===")
-        print(f"Всего собрано записей: {len(rows_data)}")
+        print(f"\n🎉 ПАРСИНГ ЗАВЕРШЕН")
+        print(f"📋 Всего собрано записей: {len(rows_data)}")
 
         # Создаем DataFrame
         if rows_data:
@@ -492,7 +588,7 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
             # Сохраняем результат в CSV для отладки
             df.to_csv('donations_result.csv', index=False, encoding='utf-8')
-            print("✅ Результат сохранен в donations_result.csv")
+            print("💾 Результат сохранен в donations_result.csv")
 
             return df
         else:
@@ -500,29 +596,36 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
             return pd.DataFrame()
 
     except Exception as e:
-        print(f"❌ Произошла ошибка: {e}")
+        print(f"❌ Критическая ошибка при парсинге: {e}")
         import traceback
         traceback.print_exc()
         return pd.DataFrame()
     finally:
-        print("Закрываем браузер...")
+        print("🔚 Закрываем браузер...")
         try:
             driver.quit()
         except:
             pass
 
 
-# Добавляем точку входа для тестирования
+def parse_table_for_service(url):
+    """Функция для сервиса парсинга"""
+    return parse_table(url)
+
+
+# Точка входа для тестирования
 if __name__ == "__main__":
-    print("🔧 Тестируем Selenium парсер...")
+    print("🔧 Запуск тестирования Selenium парсера...")
 
     # Сначала проверяем подключение
     if check_browserless_connection():
+        print("\n🚀 Запускаем парсинг...")
         result = parse_table()
         if not result.empty:
-            print("✅ Selenium парсер работает успешно!")
+            print("\n✅ Парсер успешно завершил работу!")
+            print("📄 Первые 5 записей:")
             print(result.head())
         else:
-            print("❌ Парсер не смог собрать данные")
+            print("\n❌ Парсер не смог собрать данные")
     else:
         print("❌ Не удалось подключиться к Selenium")
