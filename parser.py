@@ -124,37 +124,100 @@ def login_to_remanga(driver):
 
         print("🔍 Ищем кнопку 'Вход/Регистрация'...")
 
-        # ПРОСТОЙ И НАДЕЖНЫЙ СПОСОБ - JavaScript клик
-        try:
-            # Используем JavaScript чтобы найти и кликнуть кнопку
-            result = driver.execute_script("""
-                // Ищем кнопку по селектору
-                var button = document.querySelector("button[data-sentry-component='UserAuthButtonMenuItem']");
-                if (button) {
-                    button.click();
-                    console.log('✅ Кликнули по кнопке Вход/Регистрация');
-                    return true;
-                } else {
-                    console.log('❌ Кнопка не найдена');
-                    return false;
-                }
-            """)
+        # ДЕТАЛЬНАЯ ОТЛАДКА - что видит Selenium
+        print("=== ДЕБАГ СТРАНИЦЫ ===")
+        print(f"📄 Заголовок: {driver.title}")
+        print(f"🌐 URL: {driver.current_url}")
 
-            if result:
-                print("✅ Успешно кликнули по кнопке 'Вход/Регистрация' через JavaScript")
-            else:
-                print("❌ Кнопка не найдена через JavaScript")
-                return False
+        # Сохраняем HTML для анализа
+        with open('debug_main_page.html', 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+        print("✅ Сохранен HTML: debug_main_page.html")
 
-        except Exception as e:
-            print(f"❌ Ошибка при клике через JavaScript: {e}")
+        # Ищем ВСЕ кнопки на странице
+        all_buttons = driver.find_elements(By.TAG_NAME, 'button')
+        print(f"🔘 Всего кнопок на странице: {len(all_buttons)}")
+
+        for i, btn in enumerate(all_buttons):
+            try:
+                text = btn.text.strip()
+                if text:
+                    print(f"  Кнопка {i + 1}: '{text}'")
+            except:
+                pass
+
+        print("=====================")
+
+        # Поиск кнопки разными способами через Selenium
+        login_button = None
+        search_methods = [
+            # Способ 1: По точному селектору
+            (By.CSS_SELECTOR, "button[data-sentry-component='UserAuthButtonMenuItem']"),
+            # Способ 2: По тексту
+            (By.XPATH, "//button[contains(text(), 'Вход/Регистрация')]"),
+            # Способ 3: По части текста
+            (By.XPATH, "//button[contains(text(), 'Вход')]"),
+            # Способ 4: По классам
+            (By.CSS_SELECTOR, "button.cs-button"),
+            # Способ 5: По любому элементу с текстом
+            (By.XPATH, "//*[contains(text(), 'Вход/Регистрация')]"),
+        ]
+
+        for by, selector in search_methods:
+            try:
+                elements = driver.find_elements(by, selector)
+                print(f"🔎 {by}: '{selector}' - найдено {len(elements)} элементов")
+
+                for element in elements:
+                    if element.is_displayed() and element.is_enabled():
+                        login_button = element
+                        print(f"✅ Нашли кнопку: {by} = '{selector}'")
+                        print(f"📝 Текст кнопки: '{login_button.text}'")
+                        break
+
+                if login_button:
+                    break
+            except Exception as e:
+                print(f"❌ Ошибка поиска {by}: {e}")
+
+        if not login_button:
+            print("❌ Кнопка 'Вход/Регистрация' не найдена ни одним способом")
             return False
+
+        # КЛИКАЕМ через Selenium
+        print("🖱️ Пробуем кликнуть через Selenium...")
+        try:
+            # Способ 1: Обычный клик
+            login_button.click()
+            print("✅ Успешно кликнули обычным click()")
+        except Exception as e1:
+            print(f"❌ Обычный клик не сработал: {e1}")
+            try:
+                # Способ 2: ActionChains
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(driver)
+                actions.move_to_element(login_button).click().perform()
+                print("✅ Успешно кликнули через ActionChains")
+            except Exception as e2:
+                print(f"❌ ActionChains не сработал: {e2}")
+                try:
+                    # Способ 3: JavaScript клик как запасной вариант
+                    driver.execute_script("arguments[0].click();", login_button)
+                    print("✅ Успешно кликнули через JavaScript")
+                except Exception as e3:
+                    print(f"❌ Все способы клика не сработали: {e3}")
+                    return False
 
         # Ждем открытия формы входа
         print("⏳ Ждем открытия формы входа...")
         time.sleep(3)
 
-        # Заполняем форму входа
+        # Сохраняем страницу после клика
+        with open('debug_after_click.html', 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+        print("✅ Сохранен HTML после клика: debug_after_click.html")
+
+        # Дальше ваш код заполнения формы...
         print("🔍 Ищем поля формы входа...")
 
         # Поле логина
@@ -182,7 +245,7 @@ def login_to_remanga(driver):
         # Клик по кнопке "Войти"
         try:
             submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Войти')]")
-            driver.execute_script("arguments[0].click();", submit_button)
+            submit_button.click()
             print("✅ Кликнули по кнопке 'Войти'")
         except:
             print("⌨️ Отправляем форму нажатием Enter...")
