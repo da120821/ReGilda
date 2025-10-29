@@ -124,6 +124,24 @@ def login_to_remanga(driver):
         # ЖДЕМ ПОЛНОЙ ЗАГРУЗКИ СТРАНИЦЫ
         print("⏳ Ожидаем полной загрузки страницы...")
 
+        # После перехода на страницу добавьте:
+        print("=== ДЕТАЛЬНАЯ ОТЛАДКА СТРАНИЦЫ ===")
+        print(f"📄 Заголовок: {driver.title}")
+        print(f"🌐 URL: {driver.current_url}")
+
+        # Проверим текст на странице
+        page_text = driver.page_source[:2000]  # Первые 2000 символов
+        print(f"📝 Начало страницы: {page_text}")
+
+        # Проверим есть ли элементы с текстом об ошибке
+        error_indicators = ["доступ запрещен", "access denied", "войдите", "sign in", "login"]
+        page_lower = page_text.lower()
+        for indicator in error_indicators:
+            if indicator in page_lower:
+                print(f"🚫 Найдено: '{indicator}' - требуется авторизация")
+
+        print("=== КОНЕЦ ОТЛАДКИ ===")
+
         # Ожидаем загрузки DOM
         WebDriverWait(driver, 15).until(
             lambda driver: driver.execute_script("return document.readyState") == "complete"
