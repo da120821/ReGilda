@@ -3,6 +3,8 @@ from mysql.connector import Error
 import os
 import logging
 import re
+import idna
+from urllib.parse import urlparse, urlunparse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,6 +28,36 @@ class DatabaseManager:
         # Логируем настройки подключения (без пароля)
         logger.info(
             f"🔧 Настройки БД: host={self.config['host']}, db={self.config['database']}, port={self.config['port']}")
+
+    def url_to_punycode(self, url):
+        """Конвертирует URL в Punycode формат"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc
+
+            # Если домен уже в ASCII, ничего не делаем
+            if all(ord(char) < 128 for char in domain):
+                return url
+
+            # Конвертируем кириллический домен в Punycode
+            punycode_domain = idna.encode(domain).decode('ascii')
+
+            # Собираем URL обратно
+            punycode_url = urlunparse((
+                parsed.scheme,
+                punycode_domain,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
+
+            print(f"🔧 Конвертирован URL: {url} -> {punycode_url}")
+            return punycode_url
+
+        except Exception as e:
+            print(f"❌ Ошибка конвертации URL: {e}")
+            return url
 
     def connect(self):
         """Подключается к базе данных"""
@@ -94,11 +126,14 @@ class DatabaseManager:
             return False
 
         try:
+            # АВТОМАТИЧЕСКАЯ КОНВЕРТАЦИЯ URL В PUNYCODE
+            url = self.url_to_punycode(url)
+
             cursor = connection.cursor()
             sql = "INSERT INTO guilds (name, url) VALUES (%s, %s) ON DUPLICATE KEY UPDATE url = VALUES(url)"
             cursor.execute(sql, (guild_name, url))
             connection.commit()
-            logger.info(f"✅ Гильдия '{guild_name}' сохранена в БД")
+            logger.info(f"✅ Гильдия '{guild_name}' сохранена в БД (URL в Punycode)")
 
             # Создаем таблицу для донатов этой гильдии
             self.ensure_guild_table_exists(guild_name)
@@ -120,8 +155,14 @@ class DatabaseManager:
             cursor = connection.cursor()
             sql = "SELECT name, url FROM guilds ORDER BY name"
             cursor.execute(sql)
-            guilds = {name: url for name, url in cursor.fetchall()}
-            logger.info(f"✅ Загружено {len(guilds)} гильдий из БД")
+
+            guilds = {}
+            for name, url in cursor.fetchall():
+                # АВТОМАТИЧЕСКАЯ КОНВЕРТАЦИЯ ПРИ ЗАГРУЗКЕ
+                url = self.url_to_punycode(url)
+                guilds[name] = url
+
+            logger.info(f"✅ Загружено {len(guilds)} гильдий из БД (все URL в Punycode)")
             return guilds
         except Error as e:
             logger.error(f"❌ Ошибка загрузки гильдий из БД: {e}")

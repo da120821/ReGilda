@@ -10,30 +10,11 @@ import pandas as pd
 import re
 import os
 from dotenv import load_dotenv
-import requests
 
 # Загружаем переменные из .env файла
 load_dotenv()
 
 cookies_file = 'cookies.json'
-
-
-def check_standalone_chrome_health():
-    """Проверяет здоровье standalone Chrome сервиса"""
-    chrome_url = os.getenv('STANDALONE_CHROME_URL', 'http://standalone-chrome.railway.internal:4444')
-
-    try:
-        response = requests.get(f"{chrome_url}/status", timeout=10)
-        if response.status_code == 200:
-            status = response.json()
-            if status['value']['ready']:
-                print("✅ Standalone Chrome здоров и готов к работе")
-                return True
-        print("❌ Standalone Chrome не готов")
-        return False
-    except Exception as e:
-        print(f"❌ Ошибка проверки здоровья standalone Chrome: {e}")
-        return False
 
 
 def setup_driver():
@@ -87,7 +68,9 @@ def setup_driver():
         try:
             print("🔄 Пробуем локальный Chrome как fallback...")
             from selenium.webdriver.chrome.service import Service
-            service = Service()
+            from webdriver_manager.chrome import ChromeDriverManager
+
+            service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=chrome_options)
             print("✅ Успешно запущен локальный Chrome")
             return driver
@@ -118,6 +101,7 @@ def check_browserless_connection():
 
 
 def parse_table_for_service(url):
+    """Функция для сервиса парсинга"""
     return parse_table(url)
 
 
@@ -310,21 +294,19 @@ def load_cookies(driver):
 
 def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/settings/donations'):
     """
-    Парсит виртуализированную таблицу бустов через standalone Chrome
+    Парсит виртуализированную таблицу бустов через Selenium
     """
-    # Проверяем здоровье standalone Chrome
-    if not check_standalone_chrome_health():
-        print("⚠️ Standalone Chrome не здоров, но продолжаем попытку...")
+    print(f"🎯 Парсим URL: {url}")
 
     # Сначала проверяем подключение
     if not check_browserless_connection():
-        print("❌ Standalone Chrome недоступен, пропускаем парсинг")
+        print("❌ Selenium недоступен, пропускаем парсинг")
         return pd.DataFrame()
 
-    # Настройка браузера через standalone Chrome
+    # Настройка браузера через Selenium
     driver = setup_driver()
     if not driver:
-        print("❌ Не удалось подключиться к standalone Chrome")
+        print("❌ Не удалось подключиться к Selenium")
         return pd.DataFrame()
 
     wait = WebDriverWait(driver, 30)
@@ -352,7 +334,9 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
         # Проверяем, загрузилась ли страница
         current_url = driver.current_url
-        if "remanga.org" not in current_url:
+        print(f"📄 Текущий URL: {current_url}")
+
+        if "remanga.org" not in current_url and "реманга.орг" not in current_url:
             print(f"❌ Не удалось загрузить целевую страницу. Текущий URL: {current_url}")
             return pd.DataFrame()
 
@@ -528,17 +512,15 @@ def parse_table(url='https://remanga.org/guild/i-g-g-d-r-a-s-i-l--a1172e3f/setti
 
 # Добавляем точку входа для тестирования
 if __name__ == "__main__":
-    print("🔧 Тестируем standalone Chrome парсер...")
+    print("🔧 Тестируем Selenium парсер...")
 
-    # Проверяем health
-    check_standalone_chrome_health()
-
+    # Сначала проверяем подключение
     if check_browserless_connection():
         result = parse_table()
         if not result.empty:
-            print("✅ Standalone Chrome парсер работает успешно!")
+            print("✅ Selenium парсер работает успешно!")
             print(result.head())
         else:
             print("❌ Парсер не смог собрать данные")
     else:
-        print("❌ Не удалось подключиться к standalone Chrome")
+        print("❌ Не удалось подключиться к Selenium")
